@@ -153,3 +153,205 @@ body[data-page=auth]{background:radial-gradient(ellipse at 50% 0%,#ead8c5 0%,var
 .share-file-form :focus-visible{outline:2px solid var(--crimson);outline-offset:2px}
 @media(max-width:900px){.share-file-form{grid-template-columns:minmax(0,1.3fr) minmax(180px,.7fr)!important}}
 @media(max-width:620px){.share-file-form{grid-template-columns:minmax(0,1fr)!important}}
++.pct-0{width:0%}
+.pct-1{width:1%}
+.pct-2{width:2%}
+.pct-3{width:3%}
+.pct-4{width:4%}
+.pct-5{width:5%}
+.pct-6{width:6%}
+.pct-7{width:7%}
+.pct-8{width:8%}
+.pct-9{width:9%}
+.pct-10{width:10%}
+.pct-11{width:11%}
+.pct-12{width:12%}
+.pct-13{width:13%}
+.pct-14{width:14%}
+.pct-15{width:15%}
+.pct-16{width:16%}
+.pct-17{width:17%}
+.pct-18{width:18%}
+.pct-19{width:19%}
+.pct-20{width:20%}
+.pct-21{width:21%}
+.pct-22{width:22%}
+.pct-23{width:23%}
+.pct-24{width:24%}
+.pct-25{width:25%}
+.pct-26{width:26%}
+.pct-27{width:27%}
+.pct-28{width:28%}
+.pct-29{width:29%}
+.pct-30{width:30%}
+.pct-31{width:31%}
+.pct-32{width:32%}
+.pct-33{width:33%}
+.pct-34{width:34%}
+.pct-35{width:35%}
+.pct-36{width:36%}
+.pct-37{width:37%}
+.pct-38{width:38%}
+.pct-39{width:39%}
+.pct-40{width:40%}
+.pct-41{width:41%}
+.pct-42{width:42%}
+.pct-43{width:43%}
+.pct-44{width:44%}
+.pct-45{width:45%}
+.pct-46{width:46%}
+.pct-47{width:47%}
+.pct-48{width:48%}
+.pct-49{width:49%}
+.pct-50{width:50%}
+.pct-51{width:51%}
+.pct-52{width:52%}
+.pct-53{width:53%}
+.pct-54{width:54%}
+.pct-55{width:55%}
+.pct-56{width:56%}
+.pct-57{width:57%}
+.pct-58{width:58%}
+.pct-59{width:59%}
+.pct-60{width:60%}
+.pct-61{width:61%}
+.pct-62{width:62%}
+.pct-63{width:63%}
+.pct-64{width:64%}
+.pct-65{width:65%}
+.pct-66{width:66%}
+.pct-67{width:67%}
+.pct-68{width:68%}
+.pct-69{width:69%}
+.pct-70{width:70%}
+.pct-71{width:71%}
+.pct-72{width:72%}
+.pct-73{width:73%}
+.pct-74{width:74%}
+.pct-75{width:75%}
+.pct-76{width:76%}
+.pct-77{width:77%}
+.pct-78{width:78%}
+.pct-79{width:79%}
+.pct-80{width:80%}
+.pct-81{width:81%}
+.pct-82{width:82%}
+.pct-83{width:83%}
+.pct-84{width:84%}
+.pct-85{width:85%}
+.pct-86{width:86%}
+.pct-87{width:87%}
+.pct-88{width:88%}
+.pct-89{width:89%}
+.pct-90{width:90%}
+.pct-91{width:91%}
+.pct-92{width:92%}
+.pct-93{width:93%}
+.pct-94{width:94%}
+.pct-95{width:95%}
+.pct-96{width:96%}
+.pct-97{width:97%}
+.pct-98{width:98%}
+.pct-99{width:99%}
+.pct-100{width:100%}
++.progress-track .pct-0{width:0%}
+.progress-track .pct-1{width:1%}
+.progress-track .pct-2{width:2%}
+.progress-track .pct-3{width:3%}
+.progress-track .pct-4{width:4%}
+.progress-track .pct-5{width:5%}
+.progress-track .pct-6{width:6%}
+.progress-track .pct-7{width:7%}
+.progress-track .pct-8{width:8%}
+.progress-track .pct-9{width:9%}
+.progress-track .pct-10{width:10%}
+.progress-track .pct-11{width:11%}
+.progress-track .pct-12{width:12%}
+.progress-track .pct-13{width:13%}
+.progress-track .pct-14{width:14%}
+.progress-track .pct-15{width:15%}
+.progress-track .pct-16{width:16%}
+.progress-track .pct-17{width:17%}
+.progress-track .pct-18{width:18%}
+.progress-track .pct-19{width:19%}
+.progress-track .pct-20{width:20%}
+.progress-track .pct-21{width:21%}
+.progress-track .pct-22{width:22%}
+.progress-track .pct-23{width:23%}
+.progress-track .pct-24{width:24%}
+.progress-track .pct-25{width:25%}
+.progress-track .pct-26{width:26%}
+.progress-track .pct-27{width:27%}
+.progress-track .pct-28{width:28%}
+.progress-track .pct-29{width:29%}
+.progress-track .pct-30{width:30%}
+.progress-track .pct-31{width:31%}
+.progress-track .pct-32{width:32%}
+.progress-track .pct-33{width:33%}
+.progress-track .pct-34{width:34%}
+.progress-track .pct-35{width:35%}
+.progress-track .pct-36{width:36%}
+.progress-track .pct-37{width:37%}
+.progress-track .pct-38{width:38%}
+.progress-track .pct-39{width:39%}
+.progress-track .pct-40{width:40%}
+.progress-track .pct-41{width:41%}
+.progress-track .pct-42{width:42%}
+.progress-track .pct-43{width:43%}
+.progress-track .pct-44{width:44%}
+.progress-track .pct-45{width:45%}
+.progress-track .pct-46{width:46%}
+.progress-track .pct-47{width:47%}
+.progress-track .pct-48{width:48%}
+.progress-track .pct-49{width:49%}
+.progress-track .pct-50{width:50%}
+.progress-track .pct-51{width:51%}
+.progress-track .pct-52{width:52%}
+.progress-track .pct-53{width:53%}
+.progress-track .pct-54{width:54%}
+.progress-track .pct-55{width:55%}
+.progress-track .pct-56{width:56%}
+.progress-track .pct-57{width:57%}
+.progress-track .pct-58{width:58%}
+.progress-track .pct-59{width:59%}
+.progress-track .pct-60{width:60%}
+.progress-track .pct-61{width:61%}
+.progress-track .pct-62{width:62%}
+.progress-track .pct-63{width:63%}
+.progress-track .pct-64{width:64%}
+.progress-track .pct-65{width:65%}
+.progress-track .pct-66{width:66%}
+.progress-track .pct-67{width:67%}
+.progress-track .pct-68{width:68%}
+.progress-track .pct-69{width:69%}
+.progress-track .pct-70{width:70%}
+.progress-track .pct-71{width:71%}
+.progress-track .pct-72{width:72%}
+.progress-track .pct-73{width:73%}
+.progress-track .pct-74{width:74%}
+.progress-track .pct-75{width:75%}
+.progress-track .pct-76{width:76%}
+.progress-track .pct-77{width:77%}
+.progress-track .pct-78{width:78%}
+.progress-track .pct-79{width:79%}
+.progress-track .pct-80{width:80%}
+.progress-track .pct-81{width:81%}
+.progress-track .pct-82{width:82%}
+.progress-track .pct-83{width:83%}
+.progress-track .pct-84{width:84%}
+.progress-track .pct-85{width:85%}
+.progress-track .pct-86{width:86%}
+.progress-track .pct-87{width:87%}
+.progress-track .pct-88{width:88%}
+.progress-track .pct-89{width:89%}
+.progress-track .pct-90{width:90%}
+.progress-track .pct-91{width:91%}
+.progress-track .pct-92{width:92%}
+.progress-track .pct-93{width:93%}
+.progress-track .pct-94{width:94%}
+.progress-track .pct-95{width:95%}
+.progress-track .pct-96{width:96%}
+.progress-track .pct-97{width:97%}
+.progress-track .pct-98{width:98%}
+.progress-track .pct-99{width:99%}
+.progress-track .pct-100{width:100%}

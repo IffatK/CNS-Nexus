@@ -108,7 +108,7 @@
     const legend = el(`${id}-legend`);
     legend.replaceChildren(...series.map((s, i) => {
       const item = document.createElement("li"), swatch = document.createElement("span"), name = document.createElement("span"), value = document.createElement("b");
-      swatch.className = "legend-swatch"; swatch.style.backgroundColor = colorsUsed[i];
+      swatch.className = `legend-swatch legend-color-${i % 5}`;
       name.textContent = labels[s.name] || s.name;
       value.textContent = String(s.values.reduce((a, p) => a + p.count, 0));
       item.append(swatch, name, value); return item;

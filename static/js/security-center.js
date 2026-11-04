@@ -17,6 +17,11 @@
     sections.forEach(({section}) => sectionObserver.observe(section));
   }
   const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const setPercentClass = (element, value) => {
+    const percent = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+    [...element.classList].filter(name => /^pct-\d+$/.test(name)).forEach(name => element.classList.remove(name));
+    element.classList.add(`pct-${percent}`);
+  };
   async function csrf() {
     const response = await fetch("/api/csrf", {credentials: "same-origin", cache: "no-store"});
     if (!response.ok) throw new Error("Could not refresh CSRF token.");
@@ -42,7 +47,7 @@
       const scan = await response.json();
       const bar = progress.querySelector(".progress-track span");
       const text = progress.querySelector("p");
-      bar.style.width = `${Math.max(0, Math.min(100, scan.progress || 0))}%`;
+      setPercentClass(bar, scan.progress);
       text.textContent = `Scan #${id} · ${scan.status[0].toUpperCase()}${scan.status.slice(1)} · ${scan.progress}%`;
       if (["completed", "partial", "failed", "cancelled"].includes(scan.status)) {
         text.textContent = scan.error ? `${scan.status.toUpperCase()} · ${scan.error}` : `${scan.status.toUpperCase()} · opening report…`;
@@ -64,7 +69,7 @@
       const cancelButton = progress.querySelector(".cancel-scan");
       const bar = progress.querySelector(".progress-track span");
       button.disabled = true; button.setAttribute("aria-busy", "true");
-      status.textContent = "Submitting scan…"; progress.classList.add("active"); bar.style.width = "4%";
+      status.textContent = "Submitting scan…"; progress.classList.add("active"); setPercentClass(bar, 4);
       try {
         const token = await csrf();
         const response = await fetch(form.action, {method: "POST", credentials: "same-origin", body: new FormData(form),
@@ -76,7 +81,7 @@
         await watch(result.id, progress, cancelButton);
       } catch (error) {
         status.textContent = error.message || "Could not start the scan.";
-        bar.style.width = "0"; cancelButton.hidden = true;
+        setPercentClass(bar, 0); cancelButton.hidden = true;
         button.disabled = false; button.removeAttribute("aria-busy");
       }
     });

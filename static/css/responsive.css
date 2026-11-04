@@ -186,3 +186,6 @@ button:disabled,.btn[aria-disabled=true]{transform:none}
 .scroll>table.event-stream-table th:nth-child(3),.scroll>table.event-stream-table td:nth-child(3){min-width:190px}
 .scroll>table.event-stream-table th:nth-child(4),.scroll>table.event-stream-table td:nth-child(4){min-width:150px}
 .scroll>table.event-stream-table th:nth-child(5),.scroll>table.event-stream-table td:nth-child(5){min-width:350px}
+.result.visible{display:block}
+.legend-color-0{background:#B52A32}.legend-color-1{background:#8F2029}.legend-color-2{background:var(--success,#557A5C)}.legend-color-3{background:#C28A2C}.legend-color-4{background:#8B776B}
+.dashboard-analytics .legend-color-0{background:#D24E57}.dashboard-analytics .legend-color-1{background:#E9A257}.dashboard-analytics .legend-color-2{background:#75C99A}.dashboard-analytics .legend-color-3{background:#9585E8}.dashboard-analytics .legend-color-4{background:#68BBD0}

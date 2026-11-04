@@ -139,7 +139,7 @@
  }
  $("tamper").addEventListener("click",async()=>{
   const b=$("tamper");b.disabled=true;
-  try{const r=await window.cnsPostJSON("/api/attacker/tamper-demo",{});const d=await r.json();const box=$("tamper-result");box.style.display="block";box.innerHTML=`<b>${esc(d.title||"Tamper test")}: ${esc(d.result||r.status)}</b><p>${esc(d.detail||d.error||"")}</p>`;refresh();}
+  try{const r=await window.cnsPostJSON("/api/attacker/tamper-demo",{});const d=await r.json();const box=$("tamper-result");box.classList.add("visible");box.innerHTML=`<b>${esc(d.title||"Tamper test")}: ${esc(d.result||r.status)}</b><p>${esc(d.detail||d.error||"")}</p>`;refresh();}
   catch(e){alert("Test failed: "+e.message)}finally{b.disabled=false;}
  });
  document.querySelectorAll("[data-simulation]").forEach(button=>button.addEventListener("click",async()=>{
