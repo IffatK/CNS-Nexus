@@ -13,6 +13,9 @@
       button.textContent = "Scanning…";
       loader.hidden = false;
       form.setAttribute("aria-busy", "true");
+      const external = form.querySelector('[name="upload_file_to_virustotal"]:checked');
+      const message = loader.querySelector("[data-progress-text]");
+      if (message && external) message.textContent = "Submitting to VirusTotal for multi-engine scanning. Please wait…";
     });
   });
 })();

@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 import secrets
 import shutil
@@ -11,7 +12,7 @@ from flask_login import current_user, login_required
 from werkzeug.utils import secure_filename
 
 from extensions import db
-from models import FileShare, MalwareScan, SharedFile, User
+from models import FileShare, MalwareScan, SecurityScan, SharedFile, User
 from models.base import utcnow
 from services.scanner import file_type_matches, scan_path, scanner_status
 from services.security_log import log_event
@@ -50,6 +51,7 @@ def page():
         users_query = client_users(users_query)
     users = users_query.order_by(User.username.asc()).all()
     return render_template("files.html", owned=owned, shared=shared, users=users, engine_available=engine_available,
+                           virustotal_configured=bool(os.environ.get("VIRUSTOTAL_API_KEY", "").strip()),
                            max_mb=current_app.config["MAX_SCAN_BYTES"] // (1024 * 1024))
 
 
@@ -64,6 +66,40 @@ def upload():
     if not filename or Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
         flash("That file type is not supported.", "warning")
         return redirect(url_for("files.page"))
+    if request.form.get("upload_file_to_virustotal") == "on":
+        if not os.environ.get("VIRUSTOTAL_API_KEY", "").strip():
+            flash("VirusTotal is not configured. Add VIRUSTOTAL_API_KEY in the deployment environment.", "warning")
+            return redirect(url_for("files.page"))
+        active = SecurityScan.query.filter_by(user_id=current_user.id).filter(
+            SecurityScan.status.in_(("queued", "running"))).count()
+        if active >= 2:
+            flash("You already have two scans queued or running. Please wait for one to finish.", "warning")
+            return redirect(url_for("files.page"))
+        from services.analysis_scanner import safe_scan_file, submit_scan
+        try:
+            temp_name, size, digest, mime = safe_scan_file(upload, filename,
+                current_app.config["MAX_SCAN_BYTES"], Path(current_app.config["INSTANCE_DIR"]) / "scanner-tmp")
+        except ValueError as exc:
+            flash(str(exc), "warning")
+            return redirect(url_for("files.page"))
+        if not file_type_matches(temp_name, Path(filename).suffix.lower()):
+            Path(temp_name).unlink(missing_ok=True)
+            flash("File contents do not match the filename type.", "warning")
+            return redirect(url_for("files.page"))
+        scan = SecurityScan(user_id=current_user.id, scan_type="file", target=filename, status="queued",
+            config_json=json.dumps({"sha256": digest, "size_bytes": size, "mime_type": mime,
+                "upload_file_to_virustotal": True, "store_shared_file_on_clean": True, "temp_path": temp_name}))
+        db.session.add(scan)
+        db.session.commit()
+        if not submit_scan(current_app._get_current_object(), scan.id, temp_name):
+            scan.status, scan.error, scan.completed_at = "failed", "Scanner queue is full; retry later.", utcnow()
+            db.session.commit()
+            Path(temp_name).unlink(missing_ok=True)
+            flash(scan.error, "warning")
+            return redirect(url_for("files.page"))
+        log_event("security_scan_queued", "info", user=current_user,
+                  detail=f"scan_id={scan.id} scan_type=file provider=virustotal action=private_file_storage")
+        return redirect(url_for("security_center.detail", scan_id=scan.id))
     temp_dir = Path(current_app.config["INSTANCE_DIR"]) / "scanner-tmp"
     temp_dir.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix="share-scan-", suffix=".bin", dir=temp_dir)

@@ -1,20 +1,21 @@
 {% extends "base.html" %}
 {% block title %}Secure File Sharing · CNS Secure Lab{% endblock %}
 {% block content %}
-<div class="page-heading"><div><div class="eyebrow">Private storage · SHA-256 verified · ClamAV scanned</div><h1>Secure File Sharing</h1><p class="muted">Files stay outside the public web root. Choose registered recipients; each share can be revoked independently.</p></div></div>
+<div class="page-heading"><div><div class="eyebrow">Private storage · SHA-256 verified · malware screened</div><h1>Secure File Sharing</h1><p class="muted">Files stay outside the public web root. Choose registered recipients; each share can be revoked independently.</p></div></div>
 <section class="card file-upload-card">
   <h2>Upload a file</h2>
-  <p class="hint">Each upload is scanned before storage. Files are not accepted if ClamAV is unavailable or the scan fails. Maximum {{ max_mb }} MB · Timeout {{ config['CLAMSCAN_TIMEOUT'] }} seconds.</p>
-  {% if engine_available %}<p><span class="badge ok">ClamAV available</span> <span class="hint">Timeout {{ config['CLAMSCAN_TIMEOUT'] }} seconds</span></p>{% else %}<div class="flash warning">Local ClamAV is unavailable. File sharing remains blocked until a local scanner is available; public VirusTotal uploads are intentionally not used for private sharing. Use the <a href="{{ url_for('security_center.page') }}#file-scan">Security Analysis Center</a> for optional consent-based multi-engine analysis of non-sensitive files.</div>{% endif %}
+  <p class="hint">Every file must pass a completed scan before it can be shared. Maximum {{ max_mb }} MB. Incomplete scans are rejected.</p>
+  {% if engine_available %}<p><span class="badge ok">ClamAV available</span> <span class="hint">Timeout {{ config['CLAMSCAN_TIMEOUT'] }} seconds</span></p>{% else %}<div class="flash warning">Local ClamAV is unavailable on Render. {% if virustotal_configured %}You can opt in to VirusTotal multi-engine scanning below.{% else %}Add VIRUSTOTAL_API_KEY to Render Environment to enable optional multi-engine scanning.{% endif %}</div>{% endif %}
   <form method="post" action="{{ url_for('files.upload') }}" enctype="multipart/form-data" data-upload-progress>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label for="shared-file">Choose a file</label><input id="shared-file" type="file" name="file" accept=".txt,.csv,.pdf,.png,.jpg,.jpeg,.gif,.docx,.xlsx,.pptx,.docm,.xlsm,.pptm,.zip,.7z" required>
-    <div class="file-upload-actions"><button type="submit">Scan and store file</button><div class="upload-progress" role="status" aria-live="polite" hidden><span class="spinner" aria-hidden="true"></span><span>Uploading and scanning locally. Please wait…</span></div></div>
+    {% if virustotal_configured %}<label class="consent-row"><input type="checkbox" name="upload_file_to_virustotal"> Submit this file to VirusTotal for multi-engine scanning before private storage. I understand the sample may be shared publicly with VirusTotal partners. Do not submit sensitive or personal files.</label>{% endif %}
+    <div class="file-upload-actions"><button type="submit">Scan and store file</button><div class="upload-progress" role="status" aria-live="polite" hidden><span class="spinner" aria-hidden="true"></span><span data-progress-text>Uploading and scanning locally. Please wait…</span></div></div>
   </form>
 </section>
 <section class="card"><h2>Your files</h2>
 {% if owned %}<div class="owned-file-list">
-{% for file in owned %}<article class="owned-file-card">
+{% for file in owned %}<article class="owned-file-card" id="file-{{ file.id }}">
   <header class="owned-file-heading"><div class="file-identity"><span class="file-icon" aria-hidden="true">FILE</span><div><h3>{{ file.filename }}</h3><p class="hint">{{ file.size_bytes }} bytes <span aria-hidden="true">·</span> added {{ file.created_at }} UTC</p></div></div><div class="file-action-group"><a class="btn small secondary" href="{{ url_for('files.download', file_id=file.id) }}">Download</a><form class="inline-form" method="post" action="{{ url_for('files.verify', file_id=file.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn small secondary" type="submit">Verify hash</button></form></div></header>
   <div class="file-integrity"><span class="badge ok">Scan clean</span><span class="hint mono">SHA-256 {{ file.sha256[:16] }}…</span></div>
   <div class="file-share-layout"><section class="file-recipients"><h4>Access granted</h4><div class="share-list">{% set active_shares = file.shares|selectattr('revoked_at', 'none')|list %}{% if active_shares %}{% for share in active_shares %}<div class="share-recipient"><span><strong>{{ share.recipient.username }}</strong>{% if share.expires_at %}<small>Access until {{ share.expires_at }} UTC</small>{% else %}<small>No expiry</small>{% endif %}</span><form class="inline-form" method="post" action="{{ url_for('files.revoke', share_id=share.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn small secondary" type="submit">Revoke</button></form></div>{% endfor %}{% else %}<p class="empty">This file is private. No one else has access.</p>{% endif %}</div></section>

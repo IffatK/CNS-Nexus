@@ -7,7 +7,9 @@ import json
 import mimetypes
 import os
 import re
+import secrets
 import socket
+import shutil
 import ssl
 import threading
 import time
@@ -19,7 +21,7 @@ from pathlib import Path
 from flask import current_app
 
 from extensions import db
-from models import SecurityFinding, SecurityScan, User
+from models import SecurityFinding, SecurityScan, SharedFile, User
 from models.base import utcnow
 from services.security_log import log_event
 
@@ -819,6 +821,7 @@ def _run(app, scan_id, file_path=None):
             timeout = max(timeout, 75)
         deadline = started + timeout
         cancelled = lambda: _is_cancelled(scan_id, deadline)
+        stored_file_path = None
         try:
             if row.scan_type == "file":
                 findings, summary, status = _file_result(file_path, scan_id, cancelled)
@@ -830,6 +833,28 @@ def _run(app, scan_id, file_path=None):
                 raise ScanCancelled()
             score, level, counts = _risk(findings)
             row = db.session.get(SecurityScan, scan_id)
+            if row.scan_type == "file" and scan_config.get("store_shared_file_on_clean"):
+                scanner_result = summary.get("scanner", {})
+                if status == "completed" and scanner_result.get("status") == "clean":
+                    storage_root = Path(app.config["INSTANCE_DIR"]) / "shared-files"
+                    storage_root.mkdir(parents=True, exist_ok=True)
+                    storage_key = secrets.token_hex(24)
+                    stored_file_path = storage_root / storage_key
+                    shutil.copyfile(file_path, stored_file_path)
+                    try:
+                        os.chmod(stored_file_path, 0o600)
+                    except OSError:
+                        pass
+                    shared = SharedFile(owner_id=row.user_id, storage_key=storage_key,
+                        filename=row.target, size_bytes=int(scan_config["size_bytes"]),
+                        sha256=scan_config["sha256"], mime_type=scan_config.get("mime_type", "application/octet-stream"),
+                        scan_status="clean")
+                    db.session.add(shared)
+                    db.session.flush()
+                    summary["shared_file_id"] = shared.id
+                    summary["file_storage"] = "Stored privately after a completed clean provider scan."
+                else:
+                    summary["file_storage"] = "Not stored or shared because the multi-engine scan was not completed cleanly."
             for item in findings:
                 db.session.add(SecurityFinding(scan_id=scan_id, **item))
             row.summary_json = json.dumps({**summary, "severity_counts": counts,
@@ -840,6 +865,9 @@ def _run(app, scan_id, file_path=None):
             row.duration_ms = int((time.monotonic() - started) * 1000)
             row.completed_at = utcnow()
             db.session.commit()
+            if summary.get("shared_file_id"):
+                log_event("file_uploaded", "info", user=db.session.get(User, row.user_id),
+                          detail=f"file_id={summary['shared_file_id']} scan={row.id} scan_status=clean provider=virustotal")
             actor = db.session.get(User, row.user_id)
             log_event("security_scan_" + status, "critical" if level in ("critical", "high") else "info",
                       user=actor, detail=f"scan_id={row.id} type={row.scan_type} status={status} risk={level} finding_count={len(findings)}")
@@ -873,6 +901,11 @@ def _run(app, scan_id, file_path=None):
                 log_event("security_scan_partial", "warning", user=actor, detail=f"scan_id={row.id} type={row.scan_type} reason=timeout")
         except Exception as exc:
             db.session.rollback()
+            if stored_file_path is not None:
+                try:
+                    stored_file_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
             row = db.session.get(SecurityScan, scan_id)
             if row:
                 row.status, row.completed_at = "failed", utcnow()

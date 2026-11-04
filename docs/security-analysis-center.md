@@ -16,6 +16,8 @@ If `clamav-freshclam` is already updating signatures, do not start a second upda
 
 Render's Free web service has an ephemeral filesystem, 512 MB RAM, and spins down when idle. That is below ClamAV's 3 GiB recommended RAM, so installing the package in a free Render build does not make local ClamAV reliable. The file scan pages offer an optional VirusTotal multi-engine submission instead. The scan runs as a background job and returns a partial result with the provider report link if VirusTotal is still processing after the bounded wait. Free Render cold starts cannot be eliminated without an always-on instance.
 
+On the Secure File Sharing page, users may separately opt in to VirusTotal upload when configured. The file remains unshareable until the background scan completes cleanly; pending, failed, suspicious, or infected outcomes do not store or share it. Shared-file bytes are still stored on the app's local filesystem, so a Render Free restart/redeploy can remove stored files; use persistent/object storage for durable sharing.
+
 The following settings are optional:
 
 - `SECURITY_SCAN_TIMEOUT_SECONDS=30` bounds malware subprocess time and is checked between network operations. Network operations use short socket timeouts and byte/redirect limits; a system DNS resolver call cannot be interrupted, so the total network-scan deadline is best effort.
