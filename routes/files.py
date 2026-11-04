@@ -1,8 +1,8 @@
 import hashlib
+import io
 import json
 import os
 import secrets
-import shutil
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -17,6 +17,7 @@ from models.base import utcnow
 from services.scanner import file_type_matches, scan_path, scanner_status
 from services.security_log import log_event
 from services.roles import client_users
+from services.file_storage import delete_file, put_file, read_file, uses_supabase_storage
 
 bp = Blueprint("files", __name__)
 ALLOWED_EXTENSIONS = {".txt", ".csv", ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".docx", ".xlsx", ".pptx", ".docm", ".xlsm", ".pptm", ".zip", ".7z"}
@@ -52,6 +53,8 @@ def page():
     users = users_query.order_by(User.username.asc()).all()
     return render_template("files.html", owned=owned, shared=shared, users=users, engine_available=engine_available,
                            virustotal_configured=bool(os.environ.get("VIRUSTOTAL_API_KEY", "").strip()),
+                           supabase_storage=uses_supabase_storage(),
+                           render_deploy=bool(os.environ.get("RENDER")),
                            max_mb=current_app.config["MAX_SCAN_BYTES"] // (1024 * 1024))
 
 
@@ -133,16 +136,21 @@ def upload():
             flash(f"File was not accepted: scan status {scan['status'].upper()}. {scan['error'] or scan['detection']}", "warning")
             return redirect(url_for("files.page"))
         key = secrets.token_hex(24)
-        target = _storage_root() / key
-        shutil.copyfile(temp_name, target)
         try:
-            os.chmod(target, 0o600)
-        except OSError:
-            pass
+            put_file(temp_name, key, _storage_root(), "application/octet-stream")
+        except Exception:
+            db.session.rollback()
+            flash("The file passed scanning but private storage failed. Check Supabase Storage configuration and try again.", "warning")
+            return redirect(url_for("files.page"))
         record = SharedFile(owner_id=current_user.id, storage_key=key, filename=filename,
                             size_bytes=size, sha256=digest.hexdigest(), scan_status="clean")
         db.session.add(record)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            delete_file(key, _storage_root())
+            raise
         log_event("file_uploaded", "info", user=current_user,
                   detail=f"file_id={record.id} scan={scan_row.id} size={size} sha256={record.sha256[:16]}")
         flash("File scanned CLEAN and stored privately. It is not shared until you choose a recipient.", "ok")
@@ -218,17 +226,21 @@ def download(file_id):
     share_row = None if is_owner else _accessible_shares().filter(FileShare.file_id == record.id).first()
     if not is_owner and share_row is None:
         abort(404)
-    path = (_storage_root() / record.storage_key).resolve()
-    if path.parent != _storage_root().resolve() or not path.is_file():
+    try:
+        content = read_file(record.storage_key, _storage_root())
+    except FileNotFoundError:
         abort(404)
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    except Exception:
+        current_app.logger.exception("Shared file storage read failed for file id %s", record.id)
+        abort(503, description="Private file storage is temporarily unavailable.")
+    digest = hashlib.sha256(content).hexdigest()
     if not secrets.compare_digest(digest, record.sha256):
         log_event("file_integrity_failure", "critical", user=current_user,
                   detail=f"file_id={record.id} sha256 mismatch; download denied")
         abort(409, description="File integrity verification failed. Download blocked.")
     log_event("file_downloaded", "info", user=current_user,
               detail=f"file_id={record.id} share_id={share_row.id if share_row else 'owner'} integrity=verified")
-    return send_file(path, as_attachment=True, download_name=record.filename,
+    return send_file(io.BytesIO(content), as_attachment=True, download_name=record.filename,
                      mimetype="application/octet-stream", max_age=0)
 
 
@@ -236,8 +248,14 @@ def download(file_id):
 @login_required
 def verify(file_id):
     record = SharedFile.query.filter_by(id=file_id, owner_id=current_user.id).first_or_404()
-    path = (_storage_root() / record.storage_key).resolve()
-    actual = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else "missing"
+    try:
+        actual = hashlib.sha256(read_file(record.storage_key, _storage_root())).hexdigest()
+    except FileNotFoundError:
+        actual = "missing"
+    except Exception:
+        current_app.logger.exception("Shared file integrity read failed for file id %s", record.id)
+        flash("Private file storage is temporarily unavailable; integrity could not be checked.", "warning")
+        return redirect(url_for("files.page"))
     valid = secrets.compare_digest(actual, record.sha256)
     log_event("file_integrity_verified" if valid else "file_integrity_failure",
               "info" if valid else "critical", user=current_user,

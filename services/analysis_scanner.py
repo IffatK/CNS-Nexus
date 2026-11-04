@@ -9,7 +9,6 @@ import os
 import re
 import secrets
 import socket
-import shutil
 import ssl
 import threading
 import time
@@ -22,6 +21,7 @@ from flask import current_app
 
 from extensions import db
 from models import SecurityFinding, SecurityScan, SharedFile, User
+from services.file_storage import delete_file, put_file
 from models.base import utcnow
 from services.security_log import log_event
 
@@ -502,14 +502,18 @@ def _virustotal_file_scan(path, filename, digest, cancel_check, update):
         if not analysis_id:
             return {"status": "unavailable", "detail": "VirusTotal did not return an analysis identifier."}
         update(45)
+        # VirusTotal analyses are asynchronous. Give the provider a reasonable
+        # window to finish while respecting the public API's request limits.
+        # Four checks, spaced 15 seconds apart, avoid returning "pending" just
+        # because the first engines have not completed yet.
         data = {}
-        for progress in (65, 82):
+        for progress in (58, 70, 84, 95):
             if cancel_check():
                 raise ScanCancelled()
-            time.sleep(8)
+            time.sleep(15)
             req = urllib.request.Request(f"https://www.virustotal.com/api/v3/analyses/{urllib.parse.quote(analysis_id, safe='')}",
                 headers={"x-apikey": key, "Accept": "application/json"})
-            with urllib.request.urlopen(req, timeout=15) as response:
+            with urllib.request.urlopen(req, timeout=10) as response:
                 data = json.loads(response.read(256 * 1024) or b"{}")
             attrs = data.get("data", {}).get("attributes", {})
             update(progress)
@@ -818,13 +822,18 @@ def _run(app, scan_id, file_path=None):
         scan_config = json.loads(row.config_json or "{}")
         timeout = max(1, int(app.config.get("SECURITY_SCAN_TIMEOUT_SECONDS", 30)))
         if row.scan_type == "file" and scan_config.get("upload_file_to_virustotal"):
-            timeout = max(timeout, 75)
+            # Allow the bounded VirusTotal polling window plus the upload and
+            # network timeouts; otherwise the worker can time out before it
+            # reaches the store-after-clean step.
+            timeout = max(timeout, 140)
         deadline = started + timeout
         cancelled = lambda: _is_cancelled(scan_id, deadline)
-        stored_file_path = None
+        stored_file_key = None
+        file_scan_completed = False
         try:
             if row.scan_type == "file":
                 findings, summary, status = _file_result(file_path, scan_id, cancelled)
+                file_scan_completed = True
             elif row.scan_type == "url":
                 findings, summary, status = _url_result(scan_id, cancelled, lambda p: _set_progress(scan_id, p))
             else:
@@ -836,15 +845,11 @@ def _run(app, scan_id, file_path=None):
             if row.scan_type == "file" and scan_config.get("store_shared_file_on_clean"):
                 scanner_result = summary.get("scanner", {})
                 if status == "completed" and scanner_result.get("status") == "clean":
-                    storage_root = Path(app.config["INSTANCE_DIR"]) / "shared-files"
-                    storage_root.mkdir(parents=True, exist_ok=True)
                     storage_key = secrets.token_hex(24)
-                    stored_file_path = storage_root / storage_key
-                    shutil.copyfile(file_path, stored_file_path)
-                    try:
-                        os.chmod(stored_file_path, 0o600)
-                    except OSError:
-                        pass
+                    storage_root = Path(app.config["INSTANCE_DIR"]) / "shared-files"
+                    put_file(file_path, storage_key, storage_root,
+                             scan_config.get("mime_type", "application/octet-stream"))
+                    stored_file_key = storage_key
                     shared = SharedFile(owner_id=row.user_id, storage_key=storage_key,
                         filename=row.target, size_bytes=int(scan_config["size_bytes"]),
                         sha256=scan_config["sha256"], mime_type=scan_config.get("mime_type", "application/octet-stream"),
@@ -854,7 +859,21 @@ def _run(app, scan_id, file_path=None):
                     summary["shared_file_id"] = shared.id
                     summary["file_storage"] = "Stored privately after a completed clean provider scan."
                 else:
-                    summary["file_storage"] = "Not stored or shared because the multi-engine scan was not completed cleanly."
+                    reputation = summary.get("reputation", {})
+                    if reputation.get("status") == "pending":
+                        summary["file_storage"] = (
+                            "Not stored: VirusTotal accepted the file but its analysis is still pending. "
+                            "Open the provider report below, then upload again after the report is complete."
+                        )
+                    elif scanner_result.get("status") in ("infected", "suspicious"):
+                        summary["file_storage"] = (
+                            "Not stored or shared because the scan reported malicious or suspicious content."
+                        )
+                    else:
+                        summary["file_storage"] = (
+                            "Not stored: the provider scan did not complete with a clean verdict. "
+                            "Review the scan details below before trying again."
+                        )
             for item in findings:
                 db.session.add(SecurityFinding(scan_id=scan_id, **item))
             row.summary_json = json.dumps({**summary, "severity_counts": counts,
@@ -901,15 +920,19 @@ def _run(app, scan_id, file_path=None):
                 log_event("security_scan_partial", "warning", user=actor, detail=f"scan_id={row.id} type={row.scan_type} reason=timeout")
         except Exception as exc:
             db.session.rollback()
-            if stored_file_path is not None:
+            if stored_file_key is not None:
                 try:
-                    stored_file_path.unlink(missing_ok=True)
-                except OSError:
+                    delete_file(stored_file_key, Path(app.config["INSTANCE_DIR"]) / "shared-files")
+                except Exception:
                     pass
             row = db.session.get(SecurityScan, scan_id)
             if row:
                 row.status, row.completed_at = "failed", utcnow()
-                row.error = f"Scan failed ({type(exc).__name__})."
+                if file_scan_completed and scan_config.get("store_shared_file_on_clean"):
+                    row.error = ("The scan finished, but saving the clean file failed. Check Supabase Storage settings "
+                                 "and submit the file again.")
+                else:
+                    row.error = f"Scan failed ({type(exc).__name__})."
                 row.duration_ms = int((time.monotonic() - started) * 1000)
                 row.summary_json = json.dumps({"severity_counts": {s: 0 for s in SEVERITY_ORDER},
                     "engines": [], "limitations": ["Scan failed; no safety conclusion is available."],

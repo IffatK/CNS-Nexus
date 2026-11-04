@@ -4,7 +4,8 @@
 <div class="page-heading"><div><div class="eyebrow">Private storage · SHA-256 verified · malware screened</div><h1>Secure File Sharing</h1><p class="muted">Files stay outside the public web root. Choose registered recipients; each share can be revoked independently.</p></div></div>
 <section class="card file-upload-card">
   <h2>Upload a file</h2>
-  <p class="hint">Every file must pass a completed scan before it can be shared. Maximum {{ max_mb }} MB. Incomplete scans are rejected.</p>
+  <p class="hint">Every file must pass a completed clean scan before it can be shared. Maximum {{ max_mb }} MB. After scanning, return to this page and choose recipients under the saved file.</p>
+  {% if supabase_storage %}<p><span class="badge ok">Persistent private storage</span> <span class="hint">File bytes are stored in your private Supabase Storage bucket.</span></p>{% elif render_deploy %}<div class="flash warning">Supabase Storage is not configured. Render's local filesystem is temporary, so uploaded file bytes may disappear after a restart or redeploy. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to enable persistent private storage.</div>{% endif %}
   {% if engine_available %}<p><span class="badge ok">ClamAV available</span> <span class="hint">Timeout {{ config['CLAMSCAN_TIMEOUT'] }} seconds</span></p>{% else %}<div class="flash warning">Local ClamAV is unavailable on Render. {% if virustotal_configured %}You can opt in to VirusTotal multi-engine scanning below.{% else %}Add VIRUSTOTAL_API_KEY to Render Environment to enable optional multi-engine scanning.{% endif %}</div>{% endif %}
   <form method="post" action="{{ url_for('files.upload') }}" enctype="multipart/form-data" data-upload-progress>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
