@@ -5,7 +5,7 @@
 <section class="card file-upload-card">
   <h2>Upload a file</h2>
   <p class="hint">Each upload is scanned before storage. Files are not accepted if ClamAV is unavailable or the scan fails. Maximum {{ max_mb }} MB · Timeout {{ config['CLAMSCAN_TIMEOUT'] }} seconds.</p>
-  {% if engine_available %}<p><span class="badge ok">ClamAV available</span> <span class="hint">Timeout {{ config['CLAMSCAN_TIMEOUT'] }} seconds</span></p>{% else %}<div class="flash warning">ClamAV is unavailable. Install <code>clamav clamav-freshclam</code>; uploads remain blocked until scanning works.</div>{% endif %}
+  {% if engine_available %}<p><span class="badge ok">ClamAV available</span> <span class="hint">Timeout {{ config['CLAMSCAN_TIMEOUT'] }} seconds</span></p>{% else %}<div class="flash warning">Local ClamAV is unavailable. File sharing remains blocked until a local scanner is available; public VirusTotal uploads are intentionally not used for private sharing. Use the <a href="{{ url_for('security_center.page') }}#file-scan">Security Analysis Center</a> for optional consent-based multi-engine analysis of non-sensitive files.</div>{% endif %}
   <form method="post" action="{{ url_for('files.upload') }}" enctype="multipart/form-data" data-upload-progress>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label for="shared-file">Choose a file</label><input id="shared-file" type="file" name="file" accept=".txt,.csv,.pdf,.png,.jpg,.jpeg,.gif,.docx,.xlsx,.pptx,.docm,.xlsm,.pptm,.zip,.7z" required>

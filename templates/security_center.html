@@ -5,7 +5,7 @@
 <div class="security-center">
 <div class="page-heading"><div><div class="eyebrow">CNS Security Operations</div><h1>Malware &amp; Website Security Analysis</h1><p>Run bounded, non-destructive scans. Results are evidence from configured checks, not a guarantee that a target is safe.</p></div><span class="badge">Private scan history</span></div>
 <nav class="scanner-nav" aria-label="Scanner sections"><a href="#website-scan">Website Scan</a><a href="#url-reputation">URL Reputation</a><a href="#file-scan">File Malware Scan</a><a href="#analysis-overview">Vulnerability Findings</a><a href="#scan-history">Scan History</a><a href="#scan-history">Reports</a></nav>
-<div class="flash warning"><b>Authorization and privacy:</b> Scan only files you are permitted to analyze and websites you own or have permission to assess. URL and website scans make bounded HTTP requests to public hosts. Uploaded files are scanned locally, never executed, never extracted, and deleted from temporary storage after scanning.</div>
+<div class="flash warning"><b>Authorization and privacy:</b> Scan only files you are permitted to analyze and websites you own or have permission to assess. URL and website scans make bounded HTTP requests to public hosts. Uploaded files are never executed or extracted and are deleted from temporary storage after scanning. VirusTotal uploads are optional; submitted samples may be shared publicly with its security partners.</div>
 <section class="grid security-scan-options">
   <article class="card scan-option website-primary" id="website-scan"><div class="eyebrow">01 · Authorized assessment</div><h2>Website Scan</h2><p>Enter a public website URL to inspect transport security, response headers, cookies, redirects, and (for Comprehensive Scan) five fixed same-host exposure paths. No crawling or exploit payloads.</p>
     <form data-scan-form action="{{ url_for('security_center.scan_website') }}" method="post">
@@ -15,10 +15,11 @@
       <button type="submit">Scan Website</button><div class="scan-progress" role="status" aria-live="polite"><div class="progress-track"><span></span></div><p>Waiting to scan.</p><button type="button" class="cancel-scan" hidden>Cancel scan</button></div>
     </form>
   </article>
-  <article class="card scan-option" id="file-scan"><div class="eyebrow">02 · Local analysis</div><h2>File Malware Scan</h2><p>Hash and identify the uploaded file, then scan with local ClamAV when available. Archives are not extracted.</p>
+  <article class="card scan-option" id="file-scan"><div class="eyebrow">02 · Malware analysis</div><h2>File Malware Scan</h2><p>Scan locally with ClamAV. If you opt in below, submit the file to VirusTotal for analysis across multiple engines. The app does not extract archives; the provider may inspect their contents.</p>
     <form data-scan-form action="{{ url_for('security_center.scan_file') }}" method="post" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label for="scan-file">File · up to {{ max_mb }} MB</label><input id="scan-file" name="file" type="file" accept=".txt,.csv,.pdf,.png,.jpg,.jpeg,.gif,.docx,.xlsx,.pptx,.docm,.xlsm,.pptm,.zip,.7z" required>
       <label class="consent-row"><input type="checkbox" name="share_file_hash"> If VirusTotal is configured, I consent to sending only this file's SHA-256 hash for reputation lookup. File bytes are never uploaded to the provider.</label>
+      {% if virustotal_configured %}<label class="consent-row"><input type="checkbox" name="upload_file_to_virustotal"> Upload this file to VirusTotal for multi-engine scanning. I understand the sample and its results may be shared publicly with VirusTotal partners. I will not submit confidential, personal, or sensitive files.</label>{% else %}<p class="hint">Multi-engine uploads are not configured. Add VIRUSTOTAL_API_KEY in the private Render environment settings to enable the optional provider scan.</p>{% endif %}
       <button type="submit">Start file scan</button><div class="scan-progress" role="status" aria-live="polite"><div class="progress-track"><span></span></div><p>Waiting to scan.</p><button type="button" class="cancel-scan" hidden>Cancel scan</button></div>
     </form>
   </article>

@@ -1,6 +1,7 @@
 import csv
 import hashlib
 import io
+import json
 import os
 import tempfile
 from datetime import date, datetime, time, timezone
@@ -11,7 +12,9 @@ from flask_login import current_user, login_required
 from werkzeug.utils import secure_filename
 
 from extensions import db
-from models import MalwareScan
+from models import MalwareScan, SecurityScan
+from models.base import utcnow
+from services.analysis_scanner import submit_scan
 from services.scanner import file_type_matches, scan_path, scanner_status
 from services.security_log import log_event
 
@@ -57,6 +60,7 @@ def page():
     binary = current_app.config["CLAMSCAN_PATH"]
     available = scanner_status(binary)["available"]
     return render_template("virus_scanner.html", rows=rows, engine_available=available,
+                           virustotal_configured=bool(os.environ.get("VIRUSTOTAL_API_KEY", "").strip()),
                            max_mb=current_app.config["MAX_SCAN_BYTES"] // (1024 * 1024),
                            date_from=request.args.get("date_from", "")[:10], date_to=request.args.get("date_to", "")[:10])
 
@@ -73,6 +77,41 @@ def scan_upload():
     if not filename or suffix not in ALLOWED_EXTENSIONS:
         flash("That file type is not supported by the lab scanner.", "warning")
         return redirect(url_for("virus_scanner.page"))
+
+    if request.form.get("upload_file_to_virustotal") == "on":
+        if not os.environ.get("VIRUSTOTAL_API_KEY", "").strip():
+            flash("Multi-engine scanning is not configured. Add VIRUSTOTAL_API_KEY in the deployment environment.", "warning")
+            return redirect(url_for("virus_scanner.page"))
+        active = SecurityScan.query.filter_by(user_id=current_user.id).filter(
+            SecurityScan.status.in__(("queued", "running"))).count()
+        if active >= 2:
+            flash("You already have two scans queued or running. Please wait for one to finish.", "warning")
+            return redirect(url_for("virus_scanner.page"))
+        from services.analysis_scanner import safe_scan_file
+        try:
+            temp_name, size, digest, mime = safe_scan_file(upload, filename,
+                current_app.config["MAX_SCAN_BYTES"], Path(current_app.config["INSTANCE_DIR"]) / "scanner-tmp")
+        except ValueError as exc:
+            flash(str(exc), "warning")
+            return redirect(url_for("virus_scanner.page"))
+        if not file_type_matches(temp_name, suffix):
+            Path(temp_name).unlink(missing_ok=True)
+            flash("The file contents do not match the selected file type.", "warning")
+            return redirect(url_for("virus_scanner.page"))
+        scan = SecurityScan(user_id=current_user.id, scan_type="file", target=filename,
+            status="queued", config_json=json.dumps({"sha256": digest, "size_bytes": size,
+                "mime_type": mime, "upload_file_to_virustotal": True, "temp_path": temp_name}))
+        db.session.add(scan)
+        db.session.commit()
+        if not submit_scan(current_app._get_current_object(), scan.id, temp_name):
+            scan.status, scan.error, scan.completed_at = "failed", "Scanner queue is full; retry later.", utcnow()
+            db.session.commit()
+            Path(temp_name).unlink(missing_ok=True)
+            flash(scan.error, "warning")
+            return redirect(url_for("virus_scanner.page"))
+        log_event("security_scan_queued", "info", user=current_user,
+                  detail=f"scan_id={scan.id} scan_type=file provider=virustotal")
+        return redirect(url_for("security_center.detail", scan_id=scan.id))
 
     temp_dir = Path(current_app.config["INSTANCE_DIR"]) / "scanner-tmp"
     temp_dir.mkdir(parents=True, exist_ok=True)

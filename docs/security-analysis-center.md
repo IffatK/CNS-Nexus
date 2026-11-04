@@ -14,11 +14,13 @@ For faster repeat uploads, install and run the persistent scanner daemon: `sudo 
 
 If `clamav-freshclam` is already updating signatures, do not start a second updater. The app marks a scan incomplete if ClamAV is missing, unavailable, times out, or cannot finish; it never converts those outcomes to clean.
 
+Render's Free web service has an ephemeral filesystem, 512 MB RAM, and spins down when idle. That is below ClamAV's 3 GiB recommended RAM, so installing the package in a free Render build does not make local ClamAV reliable. The file scan pages offer an optional VirusTotal multi-engine submission instead. The scan runs as a background job and returns a partial result with the provider report link if VirusTotal is still processing after the bounded wait. Free Render cold starts cannot be eliminated without an always-on instance.
+
 The following settings are optional:
 
 - `SECURITY_SCAN_TIMEOUT_SECONDS=30` bounds malware subprocess time and is checked between network operations. Network operations use short socket timeouts and byte/redirect limits; a system DNS resolver call cannot be interrupted, so the total network-scan deadline is best effort.
 - `GOOGLE_SAFE_BROWSING_API_KEY` enables URL reputation checks. The user must opt in for each URL scan; the URL is then disclosed to Google Safe Browsing.
-- `VIRUSTOTAL_API_KEY` enables file-hash reputation lookups. The user must opt in for each file scan; only its SHA-256 hash is sent, never the file bytes.
+- `VIRUSTOTAL_API_KEY` enables VirusTotal file-hash lookups and optional multi-engine file uploads. Hash lookup sends only SHA-256 after consent. Full sample upload has a separate per-scan consent checkbox; VirusTotal says submitted samples are added to its dataset and accessible to the community. Do not upload confidential, personal, or sensitive files. Public API availability and rate limits apply.
 
 Do not commit real provider credentials. Missing keys do not prevent startup or local scanning.
 

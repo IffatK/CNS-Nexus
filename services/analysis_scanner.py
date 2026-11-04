@@ -406,9 +406,48 @@ def _reputation_check(url, allowed):
 
 
 def _file_result(path, scan_id, cancel_check):
-    from services.scanner import scan_path_cancellable
     scan = db.session.get(SecurityScan, scan_id)
     scan_config = json.loads(scan.config_json or "{}")
+    if scan_config.get("upload_file_to_virustotal"):
+        external = _virustotal_file_scan(path, scan.target, scan_config.get("sha256", ""), cancel_check,
+                                         lambda progress: _set_progress(scan_id, progress))
+        if external.get("status") in ("completed", "pending"):
+            detections = external.get("malicious", 0) + external.get("suspicious", 0)
+            is_bad = external.get("malicious", 0) > 0
+            is_suspicious = external.get("suspicious", 0) > 0
+            scan_status = "infected" if is_bad else "suspicious" if is_suspicious else "clean"
+            if external["status"] == "pending":
+                scan_status = "failed"
+            title = ("VirusTotal multi-engine analysis detected malware" if is_bad else
+                     "VirusTotal engines reported suspicious content" if is_suspicious else
+                     "No VirusTotal engine detection reported" if external["status"] == "completed" else
+                     "VirusTotal analysis is still pending")
+            severity = "critical" if is_bad else "medium" if is_suspicious or external["status"] == "pending" else "informational"
+            evidence = (f"{external.get('malicious', 0)} malicious, {external.get('suspicious', 0)} suspicious, "
+                        f"{external.get('undetected', 0)} undetected across {external.get('engine_count', 0)} engines.")
+            if external.get("engine_names"):
+                evidence += " Detections: " + ", ".join(external["engine_names"][:5]) + "."
+            if external["status"] == "pending":
+                evidence = "VirusTotal accepted the sample but analysis was not complete before the bounded wait ended. No clean verdict is available."
+            findings = [_finding("virustotal-multiengine", title, severity,
+                "high" if external["status"] == "completed" else "low", "malware", scan.target, evidence,
+                "This sample was uploaded to VirusTotal for analysis by its participating engines; submissions are added to its shared dataset.",
+                "A detection may be a false positive; a no-detection result does not prove the file is harmless.",
+                "Quarantine detected samples. For pending or inconclusive results, wait for the provider report or use an updated local scanner.",
+                "VirusTotal multi-engine", "engine-detection" if detections else "observed")]
+            details = {"sha256": scan_config.get("sha256", ""), "mime_type": scan_config.get("mime_type", "application/octet-stream"),
+                       "file_size": Path(path).stat().st_size, "scanner": {"status": scan_status,
+                       "engine": "VirusTotal multi-engine", "definitions": f"{external.get('engine_count', 0)} engines",
+                       "detection": evidence if detections else "", "error": "" if external["status"] == "completed" else evidence,
+                       "duration_ms": external.get("duration_ms", 0)}, "engines": ["VirusTotal multi-engine"],
+                       "reputation": external, "limitations": ["The file sample was submitted to VirusTotal and may be shared with its security partners; the provider may inspect archive contents.",
+                       "A clean result is not a guarantee of safety."]}
+            return findings, details, "completed" if external["status"] == "completed" else "partial"
+        # Keep fail-closed behavior, but use local ClamAV as a fallback when it exists.
+        provider_error = external.get("detail", "VirusTotal upload failed.")
+    else:
+        provider_error = ""
+    from services.scanner import scan_path_cancellable
     result = scan_path_cancellable(path, current_app.config["CLAMSCAN_PATH"],
                        scan_config.get("scanner_timeout_seconds", min(current_app.config["CLAMSCAN_TIMEOUT"], 30)),
                        filename=scan.target, cancel_check=cancel_check)
@@ -418,6 +457,8 @@ def _file_result(path, scan_id, cancel_check):
     title = {"infected": "Malware detected by ClamAV", "suspicious": "File requires manual review",
              "failed": "File scan incomplete", "clean": "No detection from configured scanner"}.get(result["status"], "File scan failed")
     evidence = result.get("detection") or result.get("error") or f"ClamAV {result['engine']} / definitions {result['definitions']} returned no detection."
+    if provider_error:
+        evidence = f"VirusTotal unavailable ({provider_error}); local result: {evidence}"
     findings.append(_finding("file-engine-result", title, severity,
         "high" if result["status"] in ("infected", "clean") else "low", "malware", scan.target, evidence,
         "ClamAV result applies only to the configured engine and its installed signatures.",
@@ -434,6 +475,75 @@ def _file_result(path, scan_id, cancel_check):
     return findings, details, "completed" if result["status"] in ("clean", "infected", "suspicious") else "partial"
 
 
+def _virustotal_file_scan(path, filename, digest, cancel_check, update):
+    """Submit an explicitly consented sample and perform a small bounded number of status checks."""
+    import secrets
+    started = time.monotonic()
+    key = os.environ.get("VIRUSTOTAL_API_KEY", "").strip()
+    if not key:
+        return {"status": "unavailable", "detail": "VirusTotal API key is not configured."}
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", Path(filename).name)[:180] or "sample.bin"
+    boundary = "----CNSScan" + secrets.token_hex(16)
+    with open(path, "rb") as sample:
+        content = sample.read()
+    body = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{safe_name}\"\r\n"
+            "Content-Type: application/octet-stream\r\n\r\n").encode("ascii") + content + f"\r\n--{boundary}--\r\n".encode("ascii")
+    upload = urllib.request.Request("https://www.virustotal.com/api/v3/files", data=body,
+        headers={"x-apikey": key, "Accept": "application/json", "Content-Type": f"multipart/form-data; boundary={boundary}"}, method="POST")
+    analysis_id = ""
+    try:
+        if cancel_check():
+            raise ScanCancelled()
+        with urllib.request.urlopen(upload, timeout=20) as response:
+            payload = json.loads(response.read(128 * 1024) or b"{}")
+        analysis_id = str(payload.get("data", {}).get("id", ""))
+        if not analysis_id:
+            return {"status": "unavailable", "detail": "VirusTotal did not return an analysis identifier."}
+        update(45)
+        data = {}
+        for progress in (65, 82):
+            if cancel_check():
+                raise ScanCancelled()
+            time.sleep(8)
+            req = urllib.request.Request(f"https://www.virustotal.com/api/v3/analyses/{urllib.parse.quote(analysis_id, safe='')}",
+                headers={"x-apikey": key, "Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=15) as response:
+                data = json.loads(response.read(256 * 1024) or b"{}")
+            attrs = data.get("data", {}).get("attributes", {})
+            update(progress)
+            if attrs.get("status") == "completed":
+                stats = attrs.get("stats", {})
+                results = attrs.get("results", {})
+                hits = [str(item.get("engine_name") or name) for name, item in results.items()
+                        if item.get("category") in ("malicious", "suspicious")]
+                return {"provider": "VirusTotal", "status": "completed", "analysis_id": analysis_id,
+                    "report_url": f"https://www.virustotal.com/gui/file/{digest}",
+                    "malicious": int(stats.get("malicious", 0)), "suspicious": int(stats.get("suspicious", 0)),
+                    "undetected": int(stats.get("undetected", 0)), "engine_count": len(results),
+                    "engine_names": hits[:5], "duration_ms": int((time.monotonic()-started)*1000)}
+        attrs = data.get("data", {}).get("attributes", {})
+        stats = attrs.get("stats", {})
+        return {"provider": "VirusTotal", "status": "pending", "analysis_id": analysis_id,
+            "report_url": f"https://www.virustotal.com/gui/file/{digest}",
+            "malicious": int(stats.get("malicious", 0)), "suspicious": int(stats.get("suspicious", 0)),
+            "undetected": int(stats.get("undetected", 0)), "engine_count": len(attrs.get("results", {})),
+            "engine_names": [], "duration_ms": int((time.monotonic()-started)*1000)}
+    except ScanCancelled:
+        raise
+    except urllib.error.HTTPError as exc:
+        if analysis_id:
+            return {"provider": "VirusTotal", "status": "pending", "analysis_id": analysis_id,
+                "report_url": f"https://www.virustotal.com/gui/file/{digest}", "detail": f"Analysis submitted; status lookup returned HTTP {exc.code}.",
+                "malicious": 0, "suspicious": 0, "undetected": 0, "engine_count": 0,
+                "engine_names": [], "duration_ms": int((time.monotonic()-started)*1000)}
+        return {"status": "unavailable", "detail": f"VirusTotal returned HTTP {exc.code}."}
+    except Exception as exc:
+        if analysis_id:
+            return {"provider": "VirusTotal", "status": "pending", "analysis_id": analysis_id,
+                "report_url": f"https://www.virustotal.com/gui/file/{digest}", "detail": f"Analysis submitted; status lookup failed ({type(exc).__name__}).",
+                "malicious": 0, "suspicious": 0, "undetected": 0, "engine_count": 0,
+                "engine_names": [], "duration_ms": int((time.monotonic()-started)*1000)}
+        return {"status": "unavailable", "detail": f"VirusTotal scan failed ({type(exc).__name__})."}
 def _file_hash_reputation(digest, consent):
     key = os.environ.get("VIRUSTOTAL_API_KEY", "").strip()
     if not key:
@@ -703,7 +813,11 @@ def _run(app, scan_id, file_path=None):
         row.status = "running"
         row.started_at = utcnow()
         db.session.commit()
-        deadline = started + max(1, int(app.config.get("SECURITY_SCAN_TIMEOUT_SECONDS", 30)))
+        scan_config = json.loads(row.config_json or "{}")
+        timeout = max(1, int(app.config.get("SECURITY_SCAN_TIMEOUT_SECONDS", 30)))
+        if row.scan_type == "file" and scan_config.get("upload_file_to_virustotal"):
+            timeout = max(timeout, 75)
+        deadline = started + timeout
         cancelled = lambda: _is_cancelled(scan_id, deadline)
         try:
             if row.scan_type == "file":

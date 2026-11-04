@@ -143,7 +143,12 @@ def scan_file():
     config = {"sha256": digest, "size_bytes": size, "mime_type": mime,
               "scanner_timeout_seconds": min(int(current_app.config["CLAMSCAN_TIMEOUT"]),
                                               int(current_app.config.get("SECURITY_SCAN_TIMEOUT_SECONDS", 30))),
-              "share_file_hash": request.form.get("share_file_hash") == "on", "temp_path": path}
+              "share_file_hash": request.form.get("share_file_hash") == "on",
+              "upload_file_to_virustotal": request.form.get("upload_file_to_virustotal") == "on",
+              "temp_path": path}
+    if config["upload_file_to_virustotal"] and not os.environ.get("VIRUSTOTAL_API_KEY", "").strip():
+        Path(path).unlink(missing_ok=True)
+        return _error("VirusTotal is not configured on the server. Add VIRUSTOTAL_API_KEY in Render environment settings.", 503)
     row, error = _create("file", filename, config=config)
     if error:
         Path(path).unlink(missing_ok=True)

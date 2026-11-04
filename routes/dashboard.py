@@ -325,6 +325,9 @@ def diagnostic_components():
     available = scanner_status(binary)["available"]
     checks.append({"name": "ClamAV scanner", "status": "HEALTHY" if available else "UNAVAILABLE",
                    "detail": "clamscan executable is available; signature freshness is checked by ClamAV." if available else "clamscan executable was not found; uploads requiring scans are blocked."})
+    vt_configured = bool(os.environ.get("VIRUSTOTAL_API_KEY", "").strip())
+    checks.append({"name": "VirusTotal multi-engine scanning", "status": "HEALTHY" if vt_configured else "NOT CONFIGURED",
+                   "detail": "Provider key is configured; file samples are uploaded only after per-scan consent." if vt_configured else "Optional multi-engine scanning is off; configure VIRUSTOTAL_API_KEY to enable consent-based scans."})
     storage = __import__("pathlib").Path(current_app.config["INSTANCE_DIR"]) / "shared-files"
     writable = False
     try:

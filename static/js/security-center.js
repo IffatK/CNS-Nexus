@@ -30,6 +30,7 @@
   async function watch(id, progress, button) {
     button.hidden = false;
     let cancelled = false;
+    let pollingDelay = 1200;
     button.onclick = async () => {
       if (cancelled) return;
       cancelled = true; button.disabled = true; progress.querySelector("p").textContent = "Cancellation requested…";
@@ -49,7 +50,8 @@
         window.location.assign(scan.detail_url);
         return;
       }
-      await pause(700);
+      await pause(pollingDelay);
+      pollingDelay = Math.min(4000, Math.round(pollingDelay * 1.45));
     }
     throw new Error("Scan status timed out. Open the Security Analysis Center to check its saved state.");
   }

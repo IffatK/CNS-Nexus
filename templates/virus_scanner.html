@@ -1,18 +1,19 @@
 {% extends "base.html" %}
 {% block title %}Virus Detection · NEXUS{% endblock %}
 {% block content %}
-<div class="eyebrow">Local antivirus · uploaded content is never executed</div>
+<div class="eyebrow">Malware scanning · uploaded content is never executed</div>
 <h1>Virus Detection</h1>
-<p class="muted">ClamAV scans run locally on the Ubuntu server. Scan failures are never reported as clean.</p>
+<p class="muted">ClamAV scans run locally. For an optional multi-engine provider scan, use the Security Analysis Center. Incomplete scans are never reported as clean.</p>
 <section class="card">
   <h2>Scan a file</h2>
   {% if engine_available %}<p><span class="badge ok">ClamAV available</span> · maximum {{ max_mb }} MB</p>
-  {% else %}<div class="flash warning"><b>Scanner unavailable.</b> Uploads will be recorded as SCAN FAILED, never CLEAN. On Ubuntu install it with <code>sudo apt install clamav clamav-freshclam</code>, then check the updater using <code>systemctl status clamav-freshclam</code>. Let that service update signatures; do not run a second updater while it is active.</div>{% endif %}
+  {% else %}<div class="flash warning"><b>Local ClamAV unavailable.</b> Local-only scans will fail closed. On Render, add the optional multi-engine API key and consent below, or use a host with ClamAV installed.</div>{% endif %}
   <form method="post" action="{{ url_for('virus_scanner.scan_upload') }}" enctype="multipart/form-data" data-upload-progress>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label for="file">File to scan</label><input id="file" type="file" name="file" accept=".txt,.csv,.pdf,.png,.jpg,.jpeg,.gif,.docx,.xlsx,.pptx,.docm,.xlsm,.pptm,.zip,.7z" required>
     <p class="hint">Supported types: documents, images, text and archives. Maximum {{ max_mb }} MB. Uploaded bytes are held in a private temporary folder and deleted after scanning.</p>
-    <button type="submit">Scan file</button><div class="upload-progress" role="status" aria-live="polite" hidden><span class="spinner" aria-hidden="true"></span><span>Uploading and scanning locally with ClamAV…</span></div>
+    {% if virustotal_configured %}<label class="consent-row"><input type="checkbox" name="upload_file_to_virustotal"> Submit this sample to VirusTotal for multi-engine scanning. I understand files and results may be shared publicly with its security partners and will not submit sensitive or personal files.</label>{% else %}<p class="hint">To enable optional multi-engine scans, configure VIRUSTOTAL_API_KEY in the Render environment settings.</p>{% endif %}
+    <button type="submit">Scan file</button><div class="upload-progress" role="status" aria-live="polite" hidden><span class="spinner" aria-hidden="true"></span><span>Uploading and scanning with configured engines…</span></div>
   </form>
 </section>
 <section class="card">
