@@ -9,6 +9,7 @@ from services.crypto import (ALG, CryptoError, Envelope, SignatureError, b64d, b
                              verify_envelope)
 from services.health import health
 from services.messaging import MessagingError
+from services.keys import KeyManagerError
 from services.security_log import log_event
 from services.transport_crypto import public_key_json, decrypt_payload
 
@@ -136,6 +137,12 @@ def lab_send_plain():
         envelope = messaging.prepare_intercepted_envelope(current_user, target.username, body)
     except MessagingError as e:
         return jsonify(error=e.message), e.status
+    except KeyManagerError:
+        db.session.rollback()
+        log_event("signing_key_unavailable", "critical", user=current_user,
+                  detail="Plaintext relay could not load the sender signing key; no message was queued")
+        return jsonify(error=("This account's signing key is unavailable on the server. Restore the original "
+                              "persistent key files before sending; do not regenerate keys or re-register.")), 503
     item = InterceptedMessage(sender_username=current_user.username, recipient_username=target.username,
                               original_body=body, source_ip=request.remote_addr or "unknown", status="pending",
                               recipient_protected=recipient_protected)
