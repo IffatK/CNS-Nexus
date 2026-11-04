@@ -54,7 +54,6 @@ def page():
     return render_template("files.html", owned=owned, shared=shared, users=users, engine_available=engine_available,
                            virustotal_configured=bool(os.environ.get("VIRUSTOTAL_API_KEY", "").strip()),
                            supabase_storage=uses_supabase_storage(),
-                           render_deploy=bool(os.environ.get("RENDER")),
                            max_mb=current_app.config["MAX_SCAN_BYTES"] // (1024 * 1024))
 
 

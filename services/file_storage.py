@@ -1,7 +1,7 @@
 """Private file storage with Supabase Storage support and local fallback.
 
-Render's local filesystem is ephemeral. Configure SUPABASE_URL and
-SUPABASE_SERVICE_ROLE_KEY to keep shared file bytes in a private Supabase bucket.
+Render's local filesystem is ephemeral. Configure SUPABASE_URL and a server-only
+Supabase secret key to keep shared file bytes in a private bucket.
 """
 import os
 import shutil
@@ -14,7 +14,8 @@ from pathlib import Path
 
 def _settings():
     base_url = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
-    service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    service_key = (os.environ.get("SUPABASE_SECRET_KEY", "").strip()
+                   or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip())
     bucket = os.environ.get("SUPABASE_STORAGE_BUCKET", "cns-shared-files").strip()
     return base_url, service_key, bucket
 
@@ -26,12 +27,16 @@ def uses_supabase_storage():
 
 def _request(method, url, *, body=None, content_type="application/json"):
     _, service_key, _ = _settings()
-    request = urllib.request.Request(url, data=body, method=method, headers={
+    headers = {
         "apikey": service_key,
-        "Authorization": f"Bearer {service_key}",
         "Content-Type": content_type,
         "Accept": "application/json",
-    })
+    }
+    # Current sb_secret keys are API keys, not JWTs; legacy service_role keys
+    # are JWTs and still need the Bearer header for Storage authorization.
+    if service_key and not service_key.startswith("sb_secret_"):
+        headers["Authorization"] = f"Bearer {service_key}"
+    request = urllib.request.Request(url, data=body, method=method, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=20) as response:
             return response.read(12 * 1024 * 1024)
