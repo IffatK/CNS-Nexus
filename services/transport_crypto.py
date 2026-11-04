@@ -25,6 +25,53 @@ def _key_path():
 
 def private_x():
     p = _key_path()
+    from flask import current_app
+    manager = current_app.extensions["cns_keys"]
+    if manager.database_backed:
+        from sqlalchemy.exc import IntegrityError
+        from extensions import db
+        from models import Message
+        from models.key_material import ApplicationKeyMaterial
+        record = db.session.get(ApplicationKeyMaterial, "transport_elgamal")
+        if record is None:
+            # Migrate the existing local transport key on first use when it is
+            # present. Never silently rotate it if protected messages exist.
+            if p.is_file():
+                try:
+                    value = int(p.read_text(encoding="ascii").strip(), 16)
+                    raw = value.to_bytes(192, "big")
+                except (ValueError, OverflowError, OSError) as exc:
+                    raise RuntimeError("The existing transport key file is invalid; restore it from backup.") from exc
+            else:
+                if Message.query.filter_by(protection="protected").count():
+                    raise RuntimeError("The transport key is missing; restore the original key to open existing protected messages.")
+                value = int.from_bytes(os.urandom(192), "big") % (P - 2) + 2
+                raw = value.to_bytes(192, "big")
+            nonce = os.urandom(12)
+            encrypted = nonce + AESGCM(manager.master_key).encrypt(
+                nonce, raw, b"cns-application-key:transport_elgamal")
+            record = ApplicationKeyMaterial(name="transport_elgamal", encrypted_value=encrypted)
+            db.session.add(record)
+            try:
+                db.session.commit()
+            except IntegrityError:
+                # Another worker initialized the singleton key at the same time.
+                db.session.rollback()
+                record = db.session.get(ApplicationKeyMaterial, "transport_elgamal")
+                if record is None:
+                    raise RuntimeError("Could not initialize persistent transport key storage.")
+        try:
+            blob = bytes(record.encrypted_value)
+            raw = AESGCM(manager.master_key).decrypt(
+                blob[:12], blob[12:], b"cns-application-key:transport_elgamal")
+            if len(raw) != 192:
+                raise ValueError("invalid key length")
+            value = int.from_bytes(raw, "big")
+            if not 1 < value < P - 1:
+                raise ValueError("invalid key value")
+            return value
+        except Exception as exc:
+            raise RuntimeError("The persistent transport key failed its integrity check.") from exc
     p.parent.mkdir(parents=True, exist_ok=True)
     if not p.exists():
         x = int.from_bytes(os.urandom(192), "big") % (P - 2) + 2

@@ -23,6 +23,17 @@ class KeyManager:
     def __init__(self, key_dir, auto_init=False):
         self.key_dir = Path(key_dir)
         self.users_dir = self.key_dir / "users"
+        configured_master = os.environ.get("CNS_MASTER_KEY", "").strip()
+        self.database_backed = bool(configured_master)
+        if self.database_backed:
+            try:
+                data = bytes.fromhex(configured_master)
+            except ValueError as exc:
+                raise KeyManagerError("CNS_MASTER_KEY must be the 64-character hexadecimal master key.") from exc
+            if len(data) != 32:
+                raise KeyManagerError("CNS_MASTER_KEY must decode to exactly 32 bytes.")
+            self._master = data
+            return
         master = self.key_dir / MASTER_NAME
         if not master.exists():
             has_user_keys = self.users_dir.is_dir() and any(self.users_dir.iterdir())
@@ -67,17 +78,33 @@ class KeyManager:
                                  serialization.NoEncryption())
         nonce = os.urandom(12)
         blob = nonce + AESGCM(self._master).encrypt(nonce, raw, self._aad(user_id))
-        self.users_dir.mkdir(exist_ok=True)
-        fd = os.open(self._user_path(user_id), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, "wb") as f:
-            f.write(blob)
+        if self.database_backed:
+            from extensions import db
+            from models.key_material import UserSigningKey
+            db.session.add(UserSigningKey(user_id=int(user_id), wrapped_key=blob))
+            # Preserve the filesystem backend's create-once behavior: reject
+            # orphaned IDs instead of ever replacing an existing account key.
+            db.session.flush()
+        else:
+            self.users_dir.mkdir(exist_ok=True)
+            fd = os.open(self._user_path(user_id), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as f:
+                f.write(blob)
         return public_key_b64(priv)
 
     def load_private(self, user_id) -> Ed25519PrivateKey:
-        p = self._user_path(user_id)
-        if not p.exists():
-            raise KeyManagerError(f"Private key for user {user_id} not found (not regenerating).")
-        blob = p.read_bytes()
+        if self.database_backed:
+            from extensions import db
+            from models.key_material import UserSigningKey
+            row = db.session.get(UserSigningKey, int(user_id))
+            if row is None:
+                raise KeyManagerError(f"Private key for user {user_id} not found in persistent key storage.")
+            blob = bytes(row.wrapped_key)
+        else:
+            p = self._user_path(user_id)
+            if not p.exists():
+                raise KeyManagerError(f"Private key for user {user_id} not found (not regenerating).")
+            blob = p.read_bytes()
         try:
             raw = AESGCM(self._master).decrypt(blob[:12], blob[12:], self._aad(user_id))
         except Exception as exc:
@@ -86,12 +113,23 @@ class KeyManager:
 
     def delete_user_key(self, user_id):
         """Only used to roll back a failed registration."""
+        if self.database_backed:
+            from extensions import db
+            from models.key_material import UserSigningKey
+            db.session.query(UserSigningKey).filter_by(user_id=int(user_id)).delete(synchronize_session=False)
+            return
         try:
             self._user_path(user_id).unlink()
         except FileNotFoundError:
             pass
 
     def status(self) -> dict:
+        if self.database_backed:
+            from extensions import db
+            from models.key_material import UserSigningKey
+            return {"master_present": True, "permissions_checked": False,
+                    "permissions_ok": True, "user_keys": UserSigningKey.query.count(),
+                    "storage": "database"}
         master = self.key_dir / MASTER_NAME
         # POSIX mode bits are meaningful on Ubuntu. Windows mode bits do not
         # represent effective ACLs, so report that review as unknown.

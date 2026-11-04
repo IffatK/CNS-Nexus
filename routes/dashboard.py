@@ -263,9 +263,11 @@ def diagnostic_components():
     from services.health import key_manager_check
     key_status = key_manager_check()
     if key_status["state"] == "HEALTHY":
-        key_detail = (f"Active master key loaded; AES-GCM self-check and {key_status['user_keys_checked']} database signing-key pair(s) verified. "
+        storage_note = "Persistent database key storage" if current_app.extensions["cns_keys"].database_backed else "Local key files"
+        key_detail = (f"Master key loaded; AES-GCM self-check, {key_status['user_keys_checked']} signing-key pair(s), "
+                      f"and transport key verified using {storage_note}. "
                       "Stored messages were not decrypted by this check.")
-    elif not key_status["permissions_checked"]:
+    elif not current_app.extensions["cns_keys"].database_backed and not key_status["permissions_checked"]:
         key_detail = (f"Key loading and {key_status['user_keys_checked']} database signing-key pair(s) were checked, "
                       "but Windows ACL permissions were not reviewed. Stored messages were not decrypted.")
     else:

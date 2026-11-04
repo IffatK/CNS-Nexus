@@ -47,7 +47,12 @@ def main():
             users_in_db = sqlite3.connect(dbfile).execute("SELECT COUNT(*) FROM users").fetchone()[0]
         except sqlite3.Error:
             pass
-    if (kdir / MASTER_NAME).exists():
+    if os.environ.get("CNS_MASTER_KEY", "").strip():
+        # Hosted database-backed mode keeps the master key in the environment
+        # and never generates a competing local key during build/startup.
+        KeyManager(kdir, auto_init=False)
+        print("[=] CNS_MASTER_KEY configured; using persistent database-backed signing keys")
+    elif (kdir / MASTER_NAME).exists():
         print("[=] master key exists - kept (never regenerated)")
     elif users_in_db:
         print(f"[!] database has {users_in_db} users but master key is missing. Refusing to create a new one.\n"

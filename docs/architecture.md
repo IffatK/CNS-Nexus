@@ -39,6 +39,8 @@ ClamAV is invoked using an argument list with `shell=False`, a 120-second defaul
 
 `db.create_all()` creates missing tables only. `create_app()` detects supported additions (`messages.protection`, `intercepted_messages.envelope_json`), writes a dated SQLite/key backup first, then applies additive `ALTER TABLE` statements. Existing user data and key files are never intentionally replaced. `scripts/init_db.py` makes a backup before initialization and checks for unsupported missing columns. Backups are written under the instance backup area; protect them as sensitive because they contain keys.
 
+When `CNS_MASTER_KEY` is configured, the master key is loaded from that environment secret, per-user wrapped Ed25519 keys are loaded from `user_signing_keys`, and the ElGamal transport key is stored encrypted in `application_key_material`. Use `scripts/migrate_keys_to_supabase.py` to validate and migrate the matching original key files before enabling this mode. Never run with a newly generated master key against existing public keys or protected messages.
+
 The dashboard's authenticated `/api/dashboard/metrics` endpoint aggregates only rows the signed-in account is authorized to see (administrators see lab-wide totals). It returns bounded time buckets and status counts; message contents, IP addresses, keys, and credentials are excluded. `/api/diagnostics` performs live checks and returns safe status strings. Chart event severities reflect the existing three-value model (`info`, `warning`, `critical`); no low/high levels are inferred.
 
 ## Useful routes

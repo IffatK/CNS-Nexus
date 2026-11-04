@@ -35,10 +35,16 @@ def key_manager_check():
             if public_key_b64(private_key) != user.public_key:
                 pairings_ok = False
             checked += 1
+        transport_key_ok = True
+        if manager.database_backed:
+            from services.transport_crypto import private_x, P
+            transport_key_ok = 1 < private_x() < P - 1
+            pairings_ok = pairings_ok and transport_key_ok
         if checked != file_status["user_keys"]:
             pairings_ok = False
     except Exception:
         pairings_ok = False
+        transport_key_ok = False
 
     operational = file_status["master_present"] and pairings_ok
     if not operational:
@@ -51,6 +57,7 @@ def key_manager_check():
             "permissions_checked": file_status["permissions_checked"],
             "permissions_ok": file_status["permissions_ok"],
             "user_keys_checked": checked, "user_key_count": file_status["user_keys"],
+            "transport_key_ok": transport_key_ok,
             "key_pairings_ok": pairings_ok, "stored_messages_checked": False}
 
 
