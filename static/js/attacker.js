@@ -1,9 +1,25 @@
 (() => {
  const $=id=>document.getElementById(id);
+ document.querySelector("#event-rows")?.closest("table")?.classList.add("event-stream-table");
+ // Keep the console navigation marker aligned with the section in view.
+ const navLinks=[...document.querySelectorAll('.sidebar a[href^="#"]')];
+ const navTargets=navLinks.map(link=>({link,target:$(link.getAttribute("href").slice(1))})).filter(item=>item.target);
+ function setActiveNav(link){
+  navLinks.forEach(item=>{const active=item===link;item.classList.toggle("active",active);if(active)item.setAttribute("aria-current","location");else item.removeAttribute("aria-current");});
+ }
+ navLinks.forEach(link=>link.addEventListener("click",()=>setActiveNav(link)));
+ setActiveNav(navTargets.find(item=>item.target.id===location.hash.slice(1))?.link||navTargets[0]?.link);
+ if("IntersectionObserver" in window){
+  const navObserver=new IntersectionObserver(entries=>{
+   const visible=entries.filter(entry=>entry.isIntersecting).sort((a,b)=>b.intersectionRatio-a.intersectionRatio)[0];
+   if(visible)setActiveNav(navTargets.find(item=>item.target===visible.target)?.link);
+  },{rootMargin:"-12% 0px -72% 0px",threshold:[0,.15,.35]});
+  navTargets.forEach(({target})=>navObserver.observe(target));
+ }
  const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
  function tag(value, cls=""){return `<span class="tag ${cls}">${esc(value)}</span>`}
  const themeColor=(name,fallback)=>getComputedStyle(document.documentElement).getPropertyValue(name).trim()||fallback;
- const palette=()=>["#B52A32","#8F2029",themeColor("--green","#557A5C"),themeColor("--amber","#C28A2C"),themeColor("--error","#9B252C")];
+ const palette=()=>document.documentElement.dataset.theme==="dark"? ["#55F39A","#2CBF75","#F0CB78","#A8D7B5","#F0918E"]:["#B52A32","#8F2029",themeColor("--green","#557A5C"),themeColor("--amber","#C28A2C"),themeColor("--error","#9B252C")];
  function plot(id, values, mode){
   const canvas=$(id),ctx=canvas?.getContext("2d");if(!ctx)return;
   const w=Math.max(320,canvas.clientWidth||320),h=180,dpr=window.devicePixelRatio||1;canvas.width=w*dpr;canvas.height=h*dpr;ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);
@@ -11,7 +27,7 @@
    const colors=palette(),total=values.reduce((n,x)=>n+x.value,0),cx=w/2,cy=h/2,r=55;let a=-Math.PI/2;
    if(total===0){ctx.fillStyle=themeColor("--muted","#82746D");ctx.textAlign="center";ctx.fillText("No message outcomes yet",cx,cy);return;}
    values.forEach((x,i)=>{if(!x.value)return;const e=a+x.value/total*Math.PI*2;ctx.beginPath();ctx.arc(cx,cy,r,a,e);ctx.strokeStyle=colors[i%colors.length];ctx.lineWidth=22;ctx.stroke();a=e;});
-   ctx.fillStyle=themeColor("--cream","#F7F0E7");ctx.textAlign="center";ctx.fillText(String(total),cx,cy+4);return;
+   ctx.fillStyle=document.documentElement.dataset.theme==="dark"?"#E8F2EA":themeColor("--cream","#F7F0E7");ctx.textAlign="center";ctx.fillText(String(total),cx,cy+4);return;
   }
   const max=Math.max(1,...values.flatMap(x=>x.values.map(y=>y.value)));
   const colors=palette();
@@ -54,6 +70,12 @@
    const r=await fetch("/api/attacker/events",{credentials:"same-origin",cache:"no-store"});
    if(!r.ok)throw new Error("HTTP "+r.status);
    const d=await r.json(); $("connection").textContent="Connected";
+   const feed=$("activity-feed"), feedCount=$("activity-count");
+   if(feed&&feedCount){
+    const recent=(d.events||[]).slice(0,8);
+    feedCount.textContent=`${d.events?.length||0} saved event${d.events?.length===1?"":"s"}`;
+    feed.innerHTML=recent.length?recent.map(e=>`<article class="activity-item ${esc(e.severity)}"><span class="activity-marker" aria-hidden="true"></span><div class="activity-copy"><b>${esc(e.type.replaceAll("_"," "))}</b><span>${esc(e.detail||"Recorded lab security event")}</span><small>${esc(e.time)} · ${esc(e.username)} · ${esc(e.source)}</small></div><span class="tag ${e.severity==="critical"?"critical":e.severity==="warning"?"warning":""}">${esc(e.severity)}</span></article>`).join(""):'<div class="empty">No recorded lab events yet. Send a message through the client portal or run a controlled simulation.</div>';
+   }
    const picker=$("simulation-message"), previous=picker?.value||"";
    if(picker){picker.innerHTML='<option value="">Use a synthetic fixture / latest message</option>'+d.messages.map(m=>`<option value="msg:${esc(m.id)}">Message #${esc(m.id)} · ${esc(m.sender)} → ${esc(m.recipient)} · ${esc(m.protection)}</option>`).join("")+d.pending.map(m=>`<option value="queue:${esc(m.id)}">Pending relay #${esc(m.id)} · ${esc(m.sender)} → ${esc(m.recipient)}</option>`).join("");if([...picker.options].some(o=>o.value===previous))picker.value=previous;}
    const pendingCount=$("pending-count"); if(pendingCount) pendingCount.textContent=d.stats.pending ?? d.pending.length;
@@ -84,9 +106,9 @@
     const protectedMode=c.protection==="protected";
     const payload=protectedMode?`<div class="content">${esc(c.wire_preview)}</div><small class="muted">Message content unavailable in observer view</small>`:`<div class="content">${esc(c.content)}</div>`;
     const statusClass=c.status.includes("intercept")?"warning":c.status.includes("drop")?"critical":c.status.includes("tamper")?"critical":"ok";
-    return `<tr><td>${esc(c.time)}<br>#${esc(c.message_id??"queued")}</td><td>${esc(c.username)} → ${esc(c.recipient)}</td><td>${esc(c.size_bytes??"—")}</td><td>${tag(protectedMode?"PROTECTED":"PLAINTEXT",protectedMode?"protected":"plaintext")}<br>${tag(c.verification,c.verification==="verified"?"ok":c.verification==="pending"?"warning":"critical")}</td><td>${payload}</td><td>${tag(c.status,statusClass)}</td></tr>`;
+    return `<tr><td>${esc(c.time)}<br>#${esc(c.message_id??"queued")}</td><td>${esc(c.username)} → ${esc(c.recipient)}</td><td>${esc(c.size_bytes??"—")}</td><td>${tag(protectedMode?"PROTECTED":"PLAINTEXT",protectedMode?"protected":"plaintext")}<br>${tag(c.verification,c.verification==="verified"?"ok":c.verification==="pending"?"warning":"critical")}</td><td class="cell-wrap">${payload}</td><td>${tag(c.status,statusClass)}</td></tr>`;
    }).join(""):'<tr><td colspan="6" class="empty">No message captures yet. Send a message from the user portal.</td></tr>';
-   $("event-rows").innerHTML=d.events.length?d.events.map(e=>`<tr><td>${esc(e.time)}</td><td>${tag(e.severity,e.severity==="critical"?"critical":e.severity==="warning"?"warning":"")}</td><td><b>${esc(e.type)}</b><br>${esc(e.username)}</td><td>${esc(e.source)}</td><td>${esc(e.detail)}</td></tr>`).join(""):'<tr><td colspan="5" class="empty">No events yet.</td></tr>';
+   $("event-rows").innerHTML=d.events.length?d.events.map(e=>`<tr><td>${esc(e.time)}</td><td>${tag(e.severity,e.severity==="critical"?"critical":e.severity==="warning"?"warning":"")}</td><td><b>${esc(e.type)}</b><br>${esc(e.username)}</td><td>${esc(e.source)}</td><td class="cell-wrap">${esc(e.detail)}</td></tr>`).join(""):'<tr><td colspan="5" class="empty">No events yet.</td></tr>';
    $("attempt-rows").innerHTML=d.attempts.length?d.attempts.map(a=>`<tr><td>${esc(a.time)}</td><td>${esc(a.username)}</td><td>${esc(a.source)}</td><td>${tag(a.result,a.result==="SUCCESS"?"ok":"critical")}</td></tr>`).join(""):'<tr><td colspan="4" class="empty">No attempts yet.</td></tr>';
   }catch(e){$("connection").textContent="Disconnected";$("event-rows").innerHTML=`<tr><td colspan="5">${esc(e.message)}</td></tr>`;}
  }
@@ -108,7 +130,7 @@
    }));
    rows.innerHTML=components.map(component=>{
     const state=component.status==="HEALTHY"?"ok":component.status==="DEGRADED"?"warning":["UNAVAILABLE","FAILED"].includes(component.status)?"critical":"neutral";
-    return `<tr><td>${esc(component.name)}</td><td>${tag(component.status,state)}</td><td>${esc(component.detail)}<br><small class="muted">Checked ${esc(component.checked_at||"")}</small></td></tr>`;
+    return `<tr><td>${esc(component.name)}</td><td>${tag(component.status,state)}</td><td class="cell-wrap">${esc(component.detail)}<br><small class="muted">Checked ${esc(component.checked_at||"")}</small></td></tr>`;
    }).join("")||'<tr><td colspan="3" class="empty">No diagnostic components were returned.</td></tr>';
   }catch(error){
    overview.textContent=`System diagnostics unavailable: ${error.message}`;

@@ -4,6 +4,7 @@ import json
 import os
 import re
 import time
+import textwrap
 import urllib.parse
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -12,6 +13,7 @@ from xml.sax.saxutils import escape
 from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 from werkzeug.utils import secure_filename
+from werkzeug.exceptions import HTTPException
 
 from extensions import db
 from models import SecurityFinding, SecurityScan
@@ -231,7 +233,7 @@ def _report_data(row):
     severity_order = {severity: index for index, severity in enumerate(SEVERITY_ORDER)}
     findings = sorted(row.findings, key=lambda f: (severity_order.get(f.severity, 99), f.id))
     return {"product": "CNS Security Lab", "report_id": f"CNS-SCAN-{row.id:08d}",
-            "scan_id": row.id, "scan_type": row.scan_type, "target": row.target,
+            "scan_id": row.id, "scan_type": row.scan_type, "target": _redact_target(row.target),
             "created_at_utc": row.created_at.isoformat() + "Z",
             "started_at_utc": row.started_at.isoformat() + "Z" if row.started_at else None,
             "completed_at_utc": row.completed_at.isoformat() + "Z" if row.completed_at else None,
@@ -247,6 +249,107 @@ def _report_data(row):
                 "verification_steps": json.loads(finding.verification_steps_json or "[]"),
                 "verification": finding.verification, "timestamp_utc": finding.created_at.isoformat() + "Z"}
                 for finding in findings]}
+
+
+def _redact_target(target):
+    parts = urllib.parse.urlsplit(target)
+    if parts.scheme and parts.netloc:
+        return urllib.parse.urlunsplit((parts.scheme, parts.netloc, parts.path, "[query redacted]" if parts.query else "", ""))
+    return target
+
+
+def _minimal_pdf(report):
+    """Dependency-free PDF fallback so report downloads do not fail without ReportLab."""
+    lines = []
+    def add(text, kind="body"):
+        text = str(text if text is not None else "")
+        for para in text.splitlines() or [""]:
+            wrapped = textwrap.wrap(para, width=92, break_long_words=True, break_on_hyphens=True) or [""]
+            lines.extend((part, kind) for part in wrapped)
+    add("CNS SECURITY LAB · SCAN REPORT", "title")
+    add(f"Report {report['report_id']} · {report['scan_type'].title()} · {report['status'].upper()}", "heading")
+    add(f"Target: {report['target']}")
+    add(f"Created UTC: {report['created_at_utc']} · Duration: {report['duration_ms']} ms")
+    risk = report["risk"]
+    add(f"Risk: {risk['level']} · score {risk['score'] if risk['score'] is not None else 'unavailable'}", "heading")
+    add(f"Method: {risk['method']}")
+    add(f"Authorization confirmed: {'yes' if report['authorization_confirmed'] else 'not applicable'}")
+    summary = report["summary"]
+    add("Scanner and provider status", "heading")
+    add("Engines: " + ", ".join(summary.get("engines", [])))
+    for name in ("checks_run", "checks_not_assessed", "limitations"):
+        if summary.get(name):
+            add(name.replace("_", " ").title(), "heading")
+            for item in summary[name]:
+                add("• " + str(item))
+    if summary.get("reputation"):
+        add("Reputation: " + json.dumps(summary["reputation"], ensure_ascii=True))
+    if report.get("scan_error"):
+        add("Scan error: " + report["scan_error"], "heading")
+    counts = summary.get("severity_counts", {})
+    add("Findings by severity", "heading")
+    add(" · ".join(f"{severity.title()}: {counts.get(severity, 0)}" for severity in SEVERITY_ORDER))
+    add("Detailed findings", "heading")
+    if not report["findings"]:
+        add("No findings were stored. This does not prove the target is safe.")
+    for finding in report["findings"]:
+        add(f"{finding['id']} · {finding['severity'].upper()} · {finding['title']} ({finding['confidence']} confidence)", "heading")
+        for label in ("category", "affected", "evidence", "explanation", "impact", "remediation", "source", "verification"):
+            add(f"{label.title()}: {finding.get(label, '')}")
+        for step in finding.get("remediation_steps", []):
+            add("How to fix: " + step)
+        for step in finding.get("verification_steps", []):
+            add("Verify: " + step)
+    add("Final assessment", "heading")
+    add("This report contains bounded observed evidence. It does not establish that a file or website is completely safe. Potential findings are not proof of exploitability.")
+
+    pages, current_page, y = [], [], 748
+    for line in lines:
+        line_height = 13 if line[1] == "body" else 20
+        if current_page and y - line_height < 48:
+            pages.append(current_page)
+            current_page, y = [], 748
+        current_page.append(line)
+        y -= line_height
+    if current_page or not pages:
+        pages.append(current_page)
+    objects = {}
+    objects[1] = b"<< /Type /Catalog /Pages 2 0 R >>"
+    objects[3] = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"
+    page_refs = []
+    for index, page_lines in enumerate(pages):
+        page_id, stream_id = 4 + index * 2, 5 + index * 2
+        page_refs.append(f"{page_id} 0 R")
+        stream = ["q 0.71 0.16 0.20 rg 0 775 612 17 re f Q"]
+        y = 748
+        for content, kind in page_lines:
+            font_size = 15 if kind == "title" else 11 if kind == "heading" else 9
+            if kind == "heading":
+                stream.append(f"0.71 0.16 0.20 rg BT /F1 {font_size} Tf 48 {y} Td ({_pdf_text(content)}) Tj ET")
+            else:
+                stream.append(f"0.16 0.13 0.13 rg BT /F1 {font_size} Tf 48 {y} Td ({_pdf_text(content)}) Tj ET")
+            y -= 13 if kind == "body" else 20
+        stream.append(f"0.25 0.22 0.21 rg BT /F1 8 Tf 48 28 Td (CNS Security Lab - confidential owner report - Page {index + 1}) Tj ET")
+        payload = "\n".join(stream).encode("cp1252", errors="replace")
+        objects[page_id] = f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents {stream_id} 0 R >>".encode("ascii")
+        objects[stream_id] = b"<< /Length " + str(len(payload)).encode("ascii") + b" >>\nstream\n" + payload + b"\nendstream"
+    objects[2] = f"<< /Type /Pages /Kids [{' '.join(page_refs)}] /Count {len(pages)} >>".encode("ascii")
+    buffer = bytearray(b"%PDF-1.4\n% CNS report\n")
+    offsets = [0] * (max(objects) + 1)
+    for object_id in sorted(objects):
+        offsets[object_id] = len(buffer)
+        buffer.extend(f"{object_id} 0 obj\n".encode("ascii")); buffer.extend(objects[object_id]); buffer.extend(b"\nendobj\n")
+    xref = len(buffer)
+    buffer.extend(f"xref\n0 {len(offsets)}\n0000000000 65535 f \n".encode("ascii"))
+    for offset in offsets[1:]:
+        buffer.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    buffer.extend(f"trailer\n<< /Size {len(offsets)} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode("ascii"))
+    return bytes(buffer)
+
+
+def _pdf_text(value):
+    text = str(value).encode("cp1252", errors="replace").decode("cp1252")
+    return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)").replace("\r", " ").replace("\n", " ")
 
 
 @bp.get("/security-center/<int:scan_id>/report.csv")
@@ -274,9 +377,7 @@ def csv_report(scan_id):
     return response
 
 
-@bp.get("/security-center/<int:scan_id>/report.pdf")
-@login_required
-def pdf_report(scan_id):
+def _build_pdf_response(scan_id):
     row = _owned(scan_id)
     try:
         from reportlab.lib import colors
@@ -284,9 +385,15 @@ def pdf_report(scan_id):
         from reportlab.lib.pagesizes import letter
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import inch
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, KeepTogether
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
     except ImportError:
-        abort(503, description="PDF reports require reportlab. Install project dependencies and retry.")
+        data = _report_data(row)
+        response = current_app.response_class(_minimal_pdf(data), mimetype="application/pdf")
+        response.headers["Content-Disposition"] = f'attachment; filename="cns-scan-{row.id}.pdf"'
+        response.headers["Cache-Control"] = "no-store"
+        log_event("security_scan_report_exported", "info", user=current_user,
+                  detail=f"scan_id={row.id} format=pdf fallback=minimal")
+        return response
     data = _report_data(row)
     output = io.BytesIO()
     crimson, cream, charcoal, beige = colors.HexColor("#B52A32"), colors.HexColor("#F7F0E7"), colors.HexColor("#292322"), colors.HexColor("#E8C9AC")
@@ -298,7 +405,7 @@ def pdf_report(scan_id):
     safe = lambda value: escape(str(value if value is not None else ""))
     story = [Spacer(1, 1.1*inch), Paragraph("CNS SECURITY LAB", styles["CNSCover"]),
              Paragraph("Malware &amp; Website Security Analysis Report", styles["Heading1"]), Spacer(1, .25*inch)]
-    cover = [["Report ID", data["report_id"]], ["Scan type", row.scan_type.title()], ["Target", row.target],
+    cover = [["Report ID", data["report_id"]], ["Scan type", row.scan_type.title()], ["Target", data["target"]],
              ["Created (UTC)", data["created_at_utc"]], ["Status", row.status.upper()],
              ["Risk", f"{row.risk_level.upper()} · score {row.risk_score if row.risk_score is not None else 'unavailable'}"]]
     table = Table([[Paragraph(safe(a), styles["CNSBody"]), Paragraph(safe(b), styles["CNSBody"])] for a,b in cover], colWidths=[1.5*inch, 4.8*inch])
@@ -309,7 +416,7 @@ def pdf_report(scan_id):
     story.append(Paragraph("Risk scoring method", styles["CNSHead"]))
     story.append(Paragraph(safe(data["risk"]["method"]), styles["CNSBody"]))
     story.append(Paragraph("Scope and authorization", styles["CNSHead"]))
-    story.append(Paragraph(safe(f"Target: {row.target}. Website authorization confirmed: {'yes' if row.authorized else 'not applicable'}. The scanner made bounded, non-destructive requests and did not crawl arbitrary domains."), styles["CNSBody"]))
+    story.append(Paragraph(safe(f"Target: {data['target']}. Website authorization confirmed: {'yes' if row.authorized else 'not applicable'}. The scanner made bounded, non-destructive requests and did not crawl arbitrary domains."), styles["CNSBody"]))
     story.append(Paragraph("Scanners and limitations", styles["CNSHead"]))
     summary = data["summary"]
     story.append(Paragraph(safe("Engines: " + ", ".join(summary.get("engines", []))), styles["CNSBody"]))
@@ -352,7 +459,9 @@ def pdf_report(scan_id):
                              ("Verification steps", json.loads(finding.verification_steps_json or "[]"))):
             block.append(Paragraph(f"<b>{safe(label)}:</b> {safe(' · '.join(items))}", styles["CNSSmall"]))
         block.append(Spacer(1,8))
-        story.append(KeepTogether(block))
+        # Let long evidence and remediation paragraphs split naturally across
+        # pages; KeepTogether can make a valid scan report exceed a page frame.
+        story.extend(block)
     story.extend([Spacer(1,12), Paragraph("Final assessment and disclaimer", styles["CNSHead"]),
                   Paragraph("This report records observed evidence from a bounded scan. Potential findings are not proof of exploitability; absence of findings does not prove security. Use only on assets you own or are authorized to assess.", styles["CNSBody"])])
     def page_decor(canvas, doc):
@@ -369,4 +478,28 @@ def pdf_report(scan_id):
     output.seek(0)
     return send_file(output, mimetype="application/pdf", as_attachment=True,
                      download_name=f"cns-scan-{row.id}.pdf", max_age=0)
+
+
+@bp.get("/security-center/<int:scan_id>/report.pdf")
+@login_required
+def pdf_report(scan_id):
+    try:
+        return _build_pdf_response(scan_id)
+    except HTTPException:
+        raise
+    except Exception:
+        # ReportLab can fail on exceptionally long findings or malformed layout
+        # content. Keep the user's download working with the built-in PDF writer.
+        current_app.logger.exception("ReportLab failed for scan report %s; using minimal PDF", scan_id)
+        db.session.rollback()
+        row = _owned(scan_id)
+        response = current_app.response_class(_minimal_pdf(_report_data(row)), mimetype="application/pdf")
+        response.headers["Content-Disposition"] = f'attachment; filename="cns-scan-{row.id}.pdf"'
+        response.headers["Cache-Control"] = "no-store"
+        try:
+            log_event("security_scan_report_exported", "warning", user=current_user,
+                      detail=f"scan_id={row.id} format=pdf fallback=minimal")
+        except Exception:
+            db.session.rollback()
+        return response
 

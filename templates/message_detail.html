@@ -11,13 +11,13 @@
   <div class="flash bad">{% if result.status == 'signature_invalid' %}TAMPERED — NOT VERIFIED. {% endif %}Integrity check failed ({{ result.status }}). Plaintext withheld. A crypto_failure security event was recorded.</div>
 {% endif %}
 <h2>Stored envelope</h2>
-<table><tbody>
+<div class="table-scroll" role="region" aria-label="Stored message envelope" tabindex="0"><table class="compact-table"><tbody>
 <tr><th>Algorithm</th><td>{{ env.alg }}</td></tr>
 <tr><th>Message UUID</th><td>{{ env.msg_uuid }}</td></tr>
 <tr><th>Nonce (96-bit, b64)</th><td class="mono">{{ env.nonce | b64 }}</td></tr>
 <tr><th>Ciphertext+tag (b64)</th><td class="mono wrap">{{ env.ciphertext | b64 }}</td></tr>
 <tr><th>Ed25519 signature</th><td class="mono wrap">{% if msg.protection == 'plaintext_relay' %}Not verified in unprotected relay mode{% else %}{{ env.signature | b64 }}{% endif %}</td></tr>
-</tbody></table>
+</tbody></table></div>
 <p><a href="{{ url_for('messaging.inbox') }}">Inbox</a> | <a href="{{ url_for('messaging.sent') }}">Sent</a></p>
 </section>
 {% endblock %}

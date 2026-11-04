@@ -1,6 +1,7 @@
 {% extends "base.html" %}{% from "_macros.html" import mtable, events_table, badge %}
 {% block title %}Dashboard · CNS SecureMail{% endblock %}
-{% block content %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css', v=asset_version('css/dashboard.css')) }}">{% endblock %}
+{% block content %}<div class="dashboard-page">
 <section class="hero">
 <div><div class="eyebrow">CNS security command center</div>
 <h1>Welcome back, {{ current_user.username }}.</h1>
@@ -8,7 +9,7 @@
 <div class="hero-actions"><a class="btn" href="{{ url_for('messaging.compose') }}">Compose a message</a><a class="btn secondary" href="{{ url_for('messaging.inbox') }}">Open inbox</a></div></div>
 <div class="hero-visual"><img src="{{ url_for('static', filename='img/security-operator.svg', v=asset_version('img/security-operator.svg')) }}" alt="CNS security shield in a crimson ring"></div>
 </section>
-<div class="stats">
+<div class="stats dashboard-kpis" aria-label="Account security metrics">
   <div class="stat"><b>{{ d.inbox }}</b><span>Messages received</span></div>
   <div class="stat"><b>{{ d.sent }}</b><span>Messages sent</span></div>
   <div class="stat"><b>{{ d.verified }}</b><span>Signatures verified</span></div>
@@ -39,23 +40,25 @@
 <section class="card diagnostics-card"><div class="eyebrow">Live diagnostics</div><h2>Service health checks</h2><p class="hint">Statuses are checked on this request. No keys, paths, or credentials are returned.</p><div class="diagnostic-grid" id="diagnostic-grid" aria-live="polite">
 {% for c in diagnostics %}<div class="diagnostic-item"><b>{{ c.name }}</b><span class="badge {% if c.status == 'HEALTHY' %}ok{% elif c.status in ('DEGRADED','UNAVAILABLE') %}bad{% else %}warning{% endif %}">{{ c.status }}</span><small>{{ c.detail }}</small></div>{% endfor %}
 </div></section>
+<section class="dashboard-analytics" aria-label="Security analytics dashboard"><div class="analytics-board-heading"><div><div class="eyebrow">Live security telemetry</div><h2>Operations overview</h2><p>Database-backed activity and verification results for your account.</p></div><span class="analytics-live"><i aria-hidden="true"></i> LIVE DATA</span></div>
 <section class="card chart-controls"><div class="eyebrow">Database-backed analytics</div><h2>Security activity</h2><form id="chart-filters" class="filters" aria-label="Chart filters">
 <label>Time range<select id="chart-days" name="days"><option value="24h">Last 24 hours</option><option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option><option value="custom">Custom range</option></select></label>
 <label class="custom-date" hidden>From<input type="date" id="chart-from"></label><label class="custom-date" hidden>To<input type="date" id="chart-to"></label>
 <label>Event type<select id="chart-event-type"><option value="">All event types</option></select></label>
-<label>Severity<select id="chart-severity"><option value="">All severities</option><option value="info">Info</option><option value="warning">Warning</option><option value="critical">Critical</option></select></label>
+<label>Severity<select id="chart-severity-filter"><option value="">All severities</option><option value="info">Info</option><option value="warning">Warning</option><option value="critical">Critical</option></select></label>
 <button class="btn" type="submit">Update charts</button><span id="chart-state" role="status" aria-live="polite">Loading chart data…</span></form>
 <p class="hint">Severity names reflect the stored event model (info, warning, critical); the app does not invent low/high classifications. Message integrity verifies each visible message against its sender key. Plaintext relay is counted separately.</p></section>
 <section class="chart-grid" aria-label="Security analytics charts">
 {% for id,title,description in [('chart-timeline','Security event timeline','Events by time'),('chart-integrity','Message integrity','Signature and verification outcomes'),('chart-attacker','Attacker relay activity','Intercepted message transitions'),('chart-logins','Login activity','Successful and failed logins'),('chart-scans','Malware scan outcomes','Completed scan records and failures'),('chart-severity','Event severity','Stored event severity categories'),('chart-files','File integrity checks','Recorded verification outcomes'),('chart-activity','Activity distribution','Events grouped by actual event category')] %}
-<article class="card chart-card"><div class="eyebrow">Security analytics</div><h3>{{ title }}</h3><p class="hint">{{ description }}</p><div class="chart-wrap"><canvas id="{{ id }}" role="img" aria-label="{{ title }} chart">{{ title }} chart is unavailable.</canvas></div><p class="chart-summary" id="{{ id }}-summary" aria-live="polite"></p><details><summary>Accessible data summary</summary><ul id="{{ id }}-data"></ul></details>{% if id == 'chart-attacker' %}<a href="{{ url_for('dashboard.events') }}">Review relay audit records →</a>{% elif id == 'chart-integrity' %}<a href="{{ url_for('messaging.inbox') }}">Review verified messages →</a>{% elif id == 'chart-scans' %}<a href="{{ url_for('virus_scanner.page') }}">Review scan records →</a>{% elif id == 'chart-files' %}<a href="{{ url_for('dashboard.events', category='file_integrity_failure') }}">Review file integrity events →</a>{% endif %}</article>
+<article class="card chart-card" data-chart="{{ id }}"><div class="chart-card-heading"><div><div class="eyebrow">Security analytics</div><h3>{{ title }}</h3></div><span class="chart-mark" aria-hidden="true">{{ '%02d'|format(loop.index) }}</span></div><p class="hint">{{ description }}</p><div class="chart-wrap"><canvas id="{{ id }}" role="img" aria-label="{{ title }} chart">{{ title }} chart is unavailable.</canvas></div><ul class="chart-legend" id="{{ id }}-legend" aria-label="{{ title }} legend"></ul><p class="chart-summary" id="{{ id }}-summary" aria-live="polite"></p><details><summary>Accessible data summary</summary><ul id="{{ id }}-data"></ul></details>{% if id == 'chart-attacker' %}<a href="{{ url_for('dashboard.events') }}">Review relay audit records →</a>{% elif id == 'chart-integrity' %}<a href="{{ url_for('messaging.inbox') }}">Review verified messages →</a>{% elif id == 'chart-scans' %}<a href="{{ url_for('virus_scanner.page') }}">Review scan records →</a>{% elif id == 'chart-files' %}<a href="{{ url_for('dashboard.events', category='file_integrity_failure') }}">Review file integrity events →</a>{% endif %}</article>
 {% endfor %}
-</section>
+</section></section>
 <section class="card"><div class="eyebrow">Threat activity</div><h2>Security events · last {{ d.period_days }} days</h2>
 <form method="get" class="filters" aria-label="Threat statistics time range"><label>Time range <select name="days"><option value="7" {% if d.period_days == 7 %}selected{% endif %}>7 days</option><option value="30" {% if d.period_days == 30 %}selected{% endif %}>30 days</option><option value="90" {% if d.period_days == 90 %}selected{% endif %}>90 days</option></select></label><button class="btn" type="submit">Update</button></form>
 <div class="stats compact"><div class="stat"><b>{{ d.event_total }}</b><span>Events in range</span></div><div class="stat"><b>{{ d.critical }}</b><span>Critical events</span></div></div>
 {% if d.critical %}<p class="flash bad">Critical security events were recorded in this period. <a href="{{ url_for('dashboard.events', severity='critical') }}">Review critical events</a></p>{% endif %}
 {{ events_table(d.events, "No security events recorded in this period.") }}<p><a href="{{ url_for('dashboard.events') }}">Review all events →</a></p></section>
-<section class="card"><div class="eyebrow">Virus Detection</div><h2>Recent scan results</h2>{% if d.recent_scans %}<div class="table-scroll"><table><thead><tr><th>Scan</th><th>File</th><th>Result</th><th>Time</th></tr></thead><tbody>{% for s in d.recent_scans %}<tr><td><a href="{{ url_for('virus_scanner.report', scan_id=s.id) }}">#{{ s.id }}</a></td><td>{{ s.filename }}</td><td>{{ s.status|upper }}</td><td>{{ s.created_at }} UTC</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="empty">No scan reports yet.</p>{% endif %}</section>
+<section class="card"><div class="eyebrow">Virus Detection</div><h2>Recent scan results</h2>{% if d.recent_scans %}<div class="table-scroll"><table><thead><tr><th>Scan</th><th>File</th><th>Result</th><th>Time</th></tr></thead><tbody>{% for s in d.recent_scans %}<tr><td><a href="{{ url_for('virus_scanner.report', scan_id=s.id) }}">#{{ s.id }}</a></td><td class="cell-wrap">{{ s.filename }}</td><td>{{ s.status|upper }}</td><td>{{ s.created_at }} UTC</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="empty">No scan reports yet.</p>{% endif %}</section>
+</div>
 {% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='js/dashboard.js', v=asset_version('js/dashboard.js')) }}" defer></script>{% endblock %}

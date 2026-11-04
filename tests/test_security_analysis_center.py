@@ -40,6 +40,8 @@ def test_security_center_page_has_scan_options_and_empty_states(app):
     assert b"No scan history yet" in response.data
     assert b"data-theme-toggle" in response.data
     assert b"security-center.js" in response.data
+    assert b"security-center.css" in response.data
+    assert client.get("/static/css/security-center.css").status_code == 200
 
 
 @pytest.mark.parametrize("value", ["localhost", "http://localhost/", "http://127.0.0.1/", "http://10.0.0.1/",
@@ -78,6 +80,23 @@ def test_no_reputation_key_reports_unavailable_without_network(monkeypatch):
     result, findings = scanner._reputation_check("https://example.com", True)
     assert result["status"] == "not_configured" and findings == []
     assert "not prove" in result["detail"] or result["detail"]
+
+
+def test_dependency_free_pdf_report_builder_produces_downloadable_pdf():
+    from routes.security_center import _minimal_pdf
+    report = {"report_id": "CNS-SCAN-00000001", "scan_type": "website", "status": "partial",
+        "target": "https://example.com/[query redacted]", "created_at_utc": "2026-10-31T00:00:00Z",
+        "duration_ms": 1200, "risk": {"level": "unknown", "score": None, "method": "No score."},
+        "authorization_confirmed": True, "summary": {"engines": ["bounded checks"],
+            "severity_counts": {severity: 0 for severity in scanner.SEVERITY_ORDER},
+            "limitations": ["A long report text " * 12]}, "scan_error": "",
+        "findings": [{"id": "F-000001", "severity": "low", "title": "Header review", "confidence": "high",
+            "category": "security-header", "affected": "https://example.com", "evidence": "Observed header missing.",
+            "explanation": "Review it.", "impact": "Possible impact.", "remediation": "Set an appropriate header.",
+            "source": "local", "verification": "observed", "remediation_steps": ["Set the header."],
+            "verification_steps": ["Run the check again."]}]}
+    data = _minimal_pdf(report)
+    assert data.startswith(b"%PDF-1.4") and b"xref" in data and b"Detailed findings" in data
 
 
 def test_website_header_checks_and_risk_keep_confidence_separate():

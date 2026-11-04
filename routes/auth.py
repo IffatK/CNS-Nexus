@@ -45,14 +45,23 @@ def register():
                     public_key="pending",
                     is_admin=username in current_app.config["ADMIN_USERNAMES"])
         db.session.add(user)
+        key_created = False
         try:
             db.session.flush()
             user.public_key = keys.create_user_keypair(user.id)
+            key_created = True
             db.session.commit()
         except (IntegrityError, OSError, RuntimeError):
+            current_app.logger.exception("Registration failed while creating the account or signing key")
             db.session.rollback()
-            if user.id:
-                pass
+            # The database and local key file cannot share a transaction. If
+            # this request created a new key but the insert failed, remove only
+            # that new key so a retry does not collide with an orphaned ID.
+            if key_created and user.id:
+                try:
+                    keys.delete_user_key(user.id)
+                except OSError:
+                    current_app.logger.exception("Could not remove orphaned signing key after registration rollback")
             log_event("register_failed", "critical", detail="could not create account/keypair", username=username)
             form.username.errors.append("Registration failed; see server log.")
             return render_template("register.html", form=form), 500

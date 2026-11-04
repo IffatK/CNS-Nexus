@@ -3,7 +3,9 @@
   const form = document.getElementById("chart-filters");
   if (!form) return;
   const themeColor = (name, fallback) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
-  const colors = () => ["#B52A32", "#8F2029", themeColor("--success", "#557A5C"), "#C28A2C", "#8B776B"];
+  const colors = () => document.querySelector(".dashboard-analytics")
+    ? ["#D24E57", "#E9A257", "#75C99A", "#9585E8", "#68BBD0"]
+    : ["#B52A32", "#8F2029", themeColor("--success", "#557A5C"), "#C28A2C", "#8B776B"];
   const names = {
     "chart-integrity": ["verified", "invalid", "errors", "unprotected"],
     "chart-attacker": ["intercepted", "unchanged_forwarded", "modified_forwarded", "dropped"],
@@ -28,6 +30,10 @@
   function draw(id, series, type = "bar") {
     const canvas = el(id), ctx = canvas.getContext("2d");
     if (!ctx) return;
+    const board = canvas.closest(".dashboard-analytics");
+    const color = (name, fallback) => board
+      ? getComputedStyle(board).getPropertyValue(name).trim() || fallback
+      : themeColor(name, fallback);
     const box = canvas.getBoundingClientRect(), ratio = window.devicePixelRatio || 1;
     canvas.width = Math.max(320, box.width) * ratio;
     canvas.height = 230 * ratio;
@@ -40,8 +46,8 @@
     const colorsUsed = series.map((_, i) => palette[i % palette.length]);
     const points = [];
     ctx.font = "11px system-ui";
-    ctx.fillStyle = themeColor("--muted", "#82746D");
-    ctx.strokeStyle = themeColor("--border", "#D7C3B0");
+    ctx.fillStyle = color("--chart-text", "#82746D");
+    ctx.strokeStyle = color("--chart-grid", "#D7C3B0");
     ctx.lineWidth = 1;
     const left = 35, right = 8, top = 8, bottom = 38, plotH = h - top - bottom, plotW = w - left - right;
     for (let i = 0; i <= 4; i++) {
@@ -50,7 +56,7 @@
       ctx.fillText(String(Math.round(max * (4 - i) / 4)), 3, y + 4);
     }
     if (!flattened.some(n => n > 0)) {
-      ctx.fillStyle = themeColor("--muted", "#82746D"); ctx.textAlign = "center"; ctx.fillText("No records in this range", w / 2, h / 2); ctx.textAlign = "left";
+      ctx.fillStyle = color("--chart-text", "#82746D"); ctx.textAlign = "center"; ctx.fillText("No records in this range", w / 2, h / 2); ctx.textAlign = "left";
     } else if (type === "line") {
       series.forEach((s, si) => {
         ctx.strokeStyle = colorsUsed[si]; ctx.lineWidth = 2; ctx.beginPath();
@@ -72,7 +78,7 @@
         const end = angle + n / total * Math.PI * 2;
         ctx.beginPath(); ctx.arc(cx, cy, radius, angle, end); ctx.strokeStyle = colorsUsed[i]; ctx.lineWidth = 20; ctx.stroke(); angle = end;
       });
-      ctx.fillStyle = themeColor("--charcoal", "#292322"); ctx.textAlign = "center"; ctx.fillText(String(total), cx, cy + 4); ctx.textAlign = "left";
+      ctx.fillStyle = color("--chart-center", themeColor("--charcoal", "#292322")); ctx.textAlign = "center"; ctx.fillText(String(total), cx, cy + 4); ctx.textAlign = "left";
     } else {
       const count = series[0].values.length, group = plotW / Math.max(1, count), bw = Math.max(2, Math.min(20, group * .72));
       series.forEach((s, si) => s.values.forEach((p, i) => {
@@ -85,7 +91,7 @@
     }
     if (series.length && series[0].values.length) {
       const ticks = series[0].values, stride = Math.max(1, Math.ceil(ticks.length / 6));
-      ctx.fillStyle = themeColor("--muted", "#82746D");
+      ctx.fillStyle = color("--chart-text", "#82746D");
       ticks.forEach((p, i) => { if (i % stride === 0 || i === ticks.length - 1) ctx.fillText(p.label.slice(5), left + i * plotW / Math.max(1, ticks.length - 1), h - 15); });
     }
     canvas.setAttribute("aria-label", `${id.replace("chart-", "")} chart. ${series.map(s => `${labels[s.name] || s.name}: ${s.values.reduce((a, p) => a + p.count, 0)}`).join("; ")}`);
@@ -99,6 +105,14 @@
     };
     const summary = series.map(s => `${labels[s.name] || s.name}: ${s.values.reduce((a, p) => a + p.count, 0)}`).join(" · ");
     el(`${id}-summary`).textContent = summary || "No records in this range.";
+    const legend = el(`${id}-legend`);
+    legend.replaceChildren(...series.map((s, i) => {
+      const item = document.createElement("li"), swatch = document.createElement("span"), name = document.createElement("span"), value = document.createElement("b");
+      swatch.className = "legend-swatch"; swatch.style.backgroundColor = colorsUsed[i];
+      name.textContent = labels[s.name] || s.name;
+      value.textContent = String(s.values.reduce((a, p) => a + p.count, 0));
+      item.append(swatch, name, value); return item;
+    }));
     const ul = el(`${id}-data`);
     ul.replaceChildren();
     series.forEach(s => {
@@ -120,7 +134,7 @@
       params.set("date_from", el("chart-from").value); params.set("date_to", el("chart-to").value);
     }
     params.set("event_type", el("chart-event-type").value);
-    params.set("severity", el("chart-severity").value);
+    params.set("severity", el("chart-severity-filter").value);
     try {
       const response = await fetch(`/api/dashboard/metrics?${params}`, { headers: { Accept: "application/json" }, credentials: "same-origin" });
       if (!response.ok) throw new Error(response.status === 401 ? "Session expired. Sign in again." : "Chart data is unavailable.");

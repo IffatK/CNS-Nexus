@@ -95,7 +95,7 @@ def transport_settings():
         db.session.add(row)
         db.session.commit()
     recipient_name = (request.args.get("recipient") or "").strip().lower()
-    target = messaging.find_user(recipient_name) if recipient_name else None
+    target = messaging.find_user(recipient_name, current_user) if recipient_name else None
     target_settings = LabSettings.query.filter_by(user_id=target.id).first() if target else None
     recipient_enabled = bool(target_settings and target_settings.protection_enabled)
     out = {"protection_enabled": bool(row.protection_enabled), "recipient_enabled": recipient_enabled,
@@ -120,7 +120,7 @@ def lab_send_plain():
         return jsonify(error="Message body is empty"), 400
     if len(body) > 2000:
         return jsonify(error="Message too long (max 2000 characters)"), 400
-    target = messaging.find_user(recipient)
+    target = messaging.find_user(recipient, current_user)
     if target is None:
         return jsonify(error="Recipient not found"), 404
     sender_settings = LabSettings.query.filter_by(user_id=current_user.id).first()
@@ -162,7 +162,7 @@ def lab_send_protected():
     if not setting or not setting.protection_enabled:
         return jsonify(error="Enable protection in Settings before sending protected messages."), 409
     recipient = data["recipient"].strip().lower()
-    target = messaging.find_user(recipient)
+    target = messaging.find_user(recipient, current_user)
     if target is None:
         return jsonify(error="Recipient not found"), 404
     # Protection follows the sender's choice. The server delivers to recipients

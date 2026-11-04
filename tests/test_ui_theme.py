@@ -30,6 +30,8 @@ def test_attacker_dashboard_exposes_real_diagnostics_and_routes(app):
     assert b'dashboard.events_csv' not in response.data  # Jinja resolved the working endpoint URL.
     assert b'/events.csv' in response.data
     assert b'/settings' in response.data
+    assert b'id="activity-feed"' in response.data
+    assert b"recorded actions only" in response.data
 
 
 def test_system_diagnostics_api_returns_truthful_component_states(app):

@@ -63,6 +63,15 @@ def test_form_compose_flow(app):
     assert b"&lt;script&gt;alert(1)&lt;/script&gt;" in page.data
 
 
+def test_compose_recipient_is_registered_user_dropdown(app):
+    alice, bob = new_user(app, "alice"), new_user(app, "bob")
+    response = alice.get("/compose")
+    assert response.status_code == 200
+    assert b'<select id="recipient" name="recipient"' in response.data
+    assert b'value="bob"' in response.data and b">bob</option>" in response.data
+    assert b'value="alice"' not in response.data
+
+
 def test_ciphertext_stored_not_plaintext(app):
     a = new_user(app, "alice"); new_user(app, "bob")
     send(a, "bob", "SECRET_PLAINTEXT_XYZ")

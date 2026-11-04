@@ -38,6 +38,36 @@
       window.dispatchEvent(new CustomEvent("cns-theme-change", {detail: {theme: next}}));
     });
   });
+
+  // Explicitly control the Security tools menu rather than relying on native
+  // disclosure behavior inside a narrow/scrollable navigation bar.
+  var toolsToggle = document.querySelector(".nav-tools-toggle");
+  var toolsMenu = document.getElementById("security-tools-menu");
+  if (toolsToggle && toolsMenu) {
+    var toolsGroup = toolsToggle.closest(".nav-more");
+    var setToolsOpen = function (open) {
+      toolsToggle.setAttribute("aria-expanded", String(open));
+      toolsMenu.hidden = !open;
+      if (toolsGroup) toolsGroup.classList.toggle("is-open", open);
+    };
+    setToolsOpen(false);
+    toolsToggle.addEventListener("click", function () {
+      setToolsOpen(toolsToggle.getAttribute("aria-expanded") !== "true");
+    });
+    toolsMenu.addEventListener("click", function (event) {
+      if (event.target.closest("a")) setToolsOpen(false);
+    });
+    document.addEventListener("click", function (event) {
+      if (toolsGroup && !toolsGroup.contains(event.target)) setToolsOpen(false);
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && toolsToggle.getAttribute("aria-expanded") === "true") {
+        setToolsOpen(false);
+        toolsToggle.focus();
+      }
+    });
+  }
+
   var drawer = document.querySelector(".nav-drawer");
   if (drawer) {
     var mobileNav = window.matchMedia("(max-width: 780px)");
@@ -93,7 +123,8 @@
             });
             tb.appendChild(tr);
           });
-          table.hidden = false; msg.textContent = "Done. Reload to see the logged events below.";
+          table.hidden = false;
+          msg.textContent = "Done. Reload to see the logged events below.";
         }).catch(function () { msg.textContent = "Network error"; });
     });
   });

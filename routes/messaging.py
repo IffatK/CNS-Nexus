@@ -6,10 +6,22 @@ from services import messaging
 from services.messaging import MessagingError
 from routes.settings import get_settings
 from extensions import db
-from models import LabCapture, InterceptedMessage
+from models import LabCapture, InterceptedMessage, User
 from services.security_log import log_event
+from services.roles import client_users
 
 bp = Blueprint("messaging", __name__)
+
+
+def _compose_page(form, status=200, protection_enabled=None):
+    users_query = User.query.filter(User.id != current_user.id)
+    if not current_user.is_admin:
+        users_query = client_users(users_query)
+    users = users_query.order_by(User.username.asc()).all()
+    if protection_enabled is None:
+        protection_enabled = get_settings(current_user).protection_enabled
+    return render_template("compose.html", form=form, users=users,
+                           protection_enabled=protection_enabled), status
 
 
 @bp.route("/compose", methods=["GET", "POST"])
@@ -17,10 +29,10 @@ bp = Blueprint("messaging", __name__)
 def compose():
     form = ComposeForm()
     if form.validate_on_submit():
-        recipient = messaging.find_user(form.recipient.data)
+        recipient = messaging.find_user(form.recipient.data, current_user)
         if recipient is None:
             form.recipient.errors.append("Recipient not found.")
-            return render_template("compose.html", form=form, protection_enabled=get_settings(current_user).protection_enabled), 404
+            return _compose_page(form, 404)
         body = form.body.data
         sender_protected = get_settings(current_user).protection_enabled
         recipient_settings = get_settings(recipient)
@@ -28,12 +40,12 @@ def compose():
         if not allowed:
             message = "Please submit with JavaScript enabled to use sender-side protected transport."
             flash(message, "warning")
-            return render_template("compose.html", form=form, protection_enabled=sender_protected), 409
+            return _compose_page(form, 409, sender_protected)
         try:
             envelope = messaging.prepare_intercepted_envelope(current_user, recipient.username, body)
         except MessagingError as exc:
             flash(exc.message, "warning")
-            return render_template("compose.html", form=form, protection_enabled=False), exc.status
+            return _compose_page(form, exc.status, False)
         item = InterceptedMessage(sender_username=current_user.username, recipient_username=recipient.username,
                                   original_body=body, source_ip=request.remote_addr or "unknown", status="pending",
                                   recipient_protected=recipient_settings.protection_enabled)
@@ -48,7 +60,7 @@ def compose():
                   detail=f"Message held for manual relay; intercept_id={item.id}; recipient={recipient.username}")
         flash("Message intercepted by the Ubuntu lab relay. It will not reach the recipient until the attacker forwards it.", "warning")
         return redirect(url_for("messaging.compose"))
-    return render_template("compose.html", form=form, protection_enabled=get_settings(current_user).protection_enabled), (400 if form.errors else 200)
+    return _compose_page(form, 400 if form.errors else 200)
 
 
 def _rows(box):

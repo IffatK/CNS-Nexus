@@ -6,7 +6,7 @@
 <div class="compose-mode"><span class="mode-label">Your protection setting</span><span id="transport-state" class="badge {{ 'ok' if protection_enabled else 'warning' }}">{{ 'PROTECTION ON' if protection_enabled else 'PROTECTION OFF' }}</span></div>
 <form method="post" id="compose-form" data-protection="{{ 'on' if protection_enabled else 'off' }}" action="{{ url_for('messaging.compose') }}">
 {{ form.hidden_tag() }}
-{{ field(form.recipient, placeholder='Enter a lab username', autocomplete='off') }}
+<label for="recipient">Recipient</label><select id="recipient" name="recipient" required><option value="">Choose a recipient…</option>{% for user in users %}<option value="{{ user.username }}" {% if form.recipient.data == user.username %}selected{% endif %}>{{ user.username }}</option>{% endfor %}</select>{% for error in form.recipient.errors %}<div class="err">{{ error }}</div>{% endfor %}
 {{ field(form.body, rows=7, placeholder='Write your message…', **{'data-counter': 'body-count', 'data-max': 2000}) }}
 <div class="hint"><span id="body-count">0</span> / 2000 characters</div>
 <div class="compose-actions"><button class="btn" type="submit" id="send-button">{{ 'Encrypt, sign & send' if protection_enabled else 'Send to lab relay' }}</button><a class="btn secondary" href="{{ url_for('settings.page') }}">Protection settings</a></div>

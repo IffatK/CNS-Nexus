@@ -1,0 +1,188 @@
+/* Shared responsive and touch-target rules, loaded after route-specific styles. */
+html{min-width:320px;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+img,svg,video,canvas,iframe{max-width:100%}
+main,main>* ,form,fieldset,.card,.grid,.stats,.filters,.table-scroll,.scroll{min-width:0}
+input,select,textarea,button,.btn{max-width:100%}
+pre,code,.mono{overflow-wrap:anywhere}
+.table-scroll,.scroll{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.table-scroll table,.scroll table{margin:0}
+.row-between,.page-heading,.hero-actions,.form-actions,.compose-actions,.scan-actions,.file-action-group{min-width:0;flex-wrap:wrap}
+button,.btn{touch-action:manipulation}
+button:disabled,.btn[aria-disabled=true]{transform:none}
+
+@media(max-width:900px){
+  body:not([data-page=attacker]) header.nav{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px 12px;align-items:center;padding:10px clamp(14px,3vw,26px)}
+  body:not([data-page=attacker]) header.nav>.brand{grid-column:1;grid-row:1;min-width:0}
+  body:not([data-page=attacker]) header.nav>.theme-toggle{grid-column:2;grid-row:1;margin:0}
+  body:not([data-page=attacker]) header.nav>.inline{grid-column:3;grid-row:1;margin:0}
+  body:not([data-page=attacker]) header.nav>.primary-nav{grid-column:1/-1;grid-row:2;order:0;display:flex;flex:initial;flex-wrap:wrap;gap:4px 7px;width:100%;overflow:visible;padding-top:3px}
+  body:not([data-page=attacker]) .primary-nav>a,body:not([data-page=attacker]) .nav-tools-toggle{min-height:40px;padding:8px 9px;font-size:13px}
+  body:not([data-page=attacker]) .nav-menu{max-width:min(280px,calc(100vw - 28px));max-height:65vh;overflow:auto}
+  body:not([data-page=attacker]) main{margin:20px 0;padding-inline:clamp(14px,3vw,28px)}
+  body:not([data-page=attacker]) footer{padding-inline:clamp(14px,3vw,28px)}
+  .compose-layout{grid-template-columns:minmax(0,1fr)}
+  .protection-aside{position:static}
+  .security-center .security-scan-options{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .security-center .website-primary{grid-column:1/-1}
+  .diagnostic-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))}
+}
+
+/* The operations console is a standalone template, so it needs the same shared
+   responsive layer while retaining its own dark visual system. */
+@media(max-width:780px){
+  body[data-page=attacker] header{height:auto;min-height:68px;flex-wrap:wrap;gap:8px 14px;padding:10px 16px}
+  body[data-page=attacker] header>.brand{flex:1 1 210px;min-width:0}
+  body[data-page=attacker] header>nav{order:3;flex:1 0 100%;width:100%;margin:0;justify-content:flex-start;flex-wrap:wrap;gap:6px 10px}
+  body[data-page=attacker] header>nav a,body[data-page=attacker] header>nav button{min-height:42px;display:inline-flex;align-items:center}
+  body[data-page=attacker] header>.status{margin-left:auto}
+  body[data-page=attacker] .sidebar{position:sticky;top:0;z-index:4;max-width:100%;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+  body[data-page=attacker] main{width:100%;margin:0;padding:20px clamp(14px,3vw,24px)}
+  body[data-page=attacker] main>.grid{grid-template-columns:minmax(0,1fr)}
+  body[data-page=attacker] .operator-strip{grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))}
+  body[data-page=attacker] .simulation-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr))}
+  body[data-page=attacker] .scroll{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+}
+
+@media(max-width:680px){
+  h1{font-size:clamp(2rem,9vw,2.8rem);line-height:1.12}
+  h2{font-size:clamp(1.35rem,6vw,1.75rem)}
+  .card{padding:17px}
+  .grid,.flow{grid-template-columns:minmax(0,1fr)}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .stats.compact{grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr))}
+  .page-heading,.row-between{align-items:flex-start;flex-direction:column}
+  .filters{display:grid;grid-template-columns:minmax(0,1fr);align-items:stretch;gap:10px;padding:13px}
+  .filters label{width:100%;min-width:0}
+  .filters button,.filters>.btn{width:100%}
+  .security-center .security-scan-options,.security-center .analysis-charts{grid-template-columns:minmax(0,1fr)}
+  .security-center .website-primary{grid-column:1}
+  .security-center .analysis-chart{padding:15px}
+  .finding-card dl{grid-template-columns:minmax(0,1fr);gap:3px}
+  .finding-card dd{margin-bottom:9px}
+  .dashboard-analytics .analytics-board-heading{align-items:flex-start}
+  .chart-card .hint{min-height:0}
+  .chart-wrap{max-width:100%}
+  .chart-wrap canvas{max-width:100%}
+  .file-share-layout{grid-template-columns:minmax(0,1fr)}
+  .share-file-form{grid-template-columns:minmax(0,1fr)!important}
+  .share-submit button{width:100%}
+  .file-upload-actions{align-items:stretch;flex-direction:column}
+  .file-upload-actions>button{width:100%}
+  .file-action-group{width:100%}
+  .file-action-group .btn,.file-action-group button{flex:1}
+  .owned-file-heading{align-items:flex-start;flex-direction:column}
+  .intercept-actions{display:grid;grid-template-columns:minmax(0,1fr);gap:9px}
+  .intercept-actions button,.intercept-actions .forward-original,.intercept-actions .forward-edited,.intercept-actions .drop{width:100%;min-width:0;margin-left:0}
+  .activity-item{grid-template-columns:9px minmax(0,1fr);gap:9px}
+  .activity-item>.tag{grid-column:2;justify-self:start}
+  .scanner-nav{max-width:100%;scroll-snap-type:x proximity}
+  .scanner-nav a{scroll-snap-align:start}
+  .report-links{flex-wrap:wrap!important}
+}
+
+@media(max-width:520px){
+  body:not([data-page=attacker]) header.nav{grid-template-columns:minmax(0,1fr) auto;gap:7px 9px;padding:9px 12px}
+  body:not([data-page=attacker]) header.nav>.brand{grid-column:1;grid-row:1}
+  body:not([data-page=attacker]) header.nav>.theme-toggle{grid-column:2;grid-row:1;min-height:40px;padding:7px 9px}
+  body:not([data-page=attacker]) header.nav>.inline{grid-column:1/-1;grid-row:3;justify-content:space-between;width:100%;padding-top:4px;border-top:1px solid var(--border)}
+  body:not([data-page=attacker]) header.nav>.primary-nav{grid-column:1/-1;grid-row:2;flex-wrap:wrap;overflow:visible;gap:3px 5px;padding:2px 0 5px}
+  body:not([data-page=attacker]) .primary-nav>a,body:not([data-page=attacker]) .nav-tools-toggle{flex:0 0 auto;min-height:42px;padding:8px 9px;font-size:12px}
+  /* Render the security links in the nav flow on phones. This avoids clipping
+     by mobile browser overflow containers and makes the open state obvious. */
+  body:not([data-page=attacker]) header.nav{position:relative;z-index:20}
+  body:not([data-page=attacker]) .nav-more{position:static}
+  body:not([data-page=attacker]) .nav-more.is-open{flex:1 0 100%;min-width:0}
+  body:not([data-page=attacker]) .nav-more.is-open>.nav-tools-toggle{background:var(--cream);color:var(--crimson)}
+  body:not([data-page=attacker]) .nav-menu{position:static;inset:auto;width:100%;min-width:0;max-width:none;max-height:none;overflow:visible;z-index:auto;grid-template-columns:minmax(0,1fr);margin-top:5px;padding:7px;background:var(--surface);border:1px solid var(--border);box-shadow:none}
+  body:not([data-page=attacker]) .nav-menu[hidden]{display:none!important}
+  body:not([data-page=attacker]) .nav-more.is-open>.nav-menu:not([hidden]){display:grid}
+  body:not([data-page=attacker]) .nav-more>.nav-menu a{min-height:44px;display:flex;align-items:center}
+  body:not([data-page=attacker]) main{margin:15px 0;padding-inline:12px}
+  body:not([data-page=attacker]) footer{margin-top:20px;padding:14px 12px 20px}
+  .auth-card{padding:22px 17px}
+  .hero{padding:20px}
+  .hero-actions{display:grid;grid-template-columns:minmax(0,1fr);width:100%}
+  .hero-actions .btn{width:100%}
+  .dashboard-page .dashboard-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+  .dashboard-page .dashboard-kpis .stat{padding:13px}
+  .dashboard-page .dashboard-kpis .stat b{font-size:1.7rem}
+  .dashboard-analytics{padding:12px}
+  .dashboard-analytics .chart-grid{grid-template-columns:minmax(0,1fr)}
+  .dashboard-analytics .chart-card[data-chart]{grid-column:1}
+  .operator-strip{grid-template-columns:minmax(0,1fr)}
+  .stats.primary-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .simulation-grid{grid-template-columns:minmax(0,1fr)}
+  .simulation-card{min-width:0}
+  .simulation-card button{width:100%}
+  .intercept-item{padding:12px}
+  .intercept-head{align-items:flex-start}
+  .activity-heading{align-items:flex-start;flex-direction:column}
+  .file-identity{align-items:flex-start}
+  .file-identity h3{font-size:15px}
+  .share-recipient{align-items:flex-start;flex-direction:column}
+  .diagnostic-summary{grid-template-columns:minmax(0,1fr)}
+  .diagnostic-chip{align-items:flex-start;flex-direction:column}
+  .table-scroll table{min-width:620px}
+  .scroll table{min-width:620px}
+  .security-center #scan-history table{min-width:1480px}
+  .report-links{gap:8px!important}
+  .report-links a{padding:3px 0}
+}
+
+@media(max-width:520px){
+  body[data-page=attacker] header{gap:7px 10px;padding:9px 12px}
+  body[data-page=attacker] header>.brand{flex-basis:100%;font-size:14px}
+  body[data-page=attacker] header>.status{order:2;width:auto;margin-left:0;font-size:10px}
+  body[data-page=attacker] header>nav{order:3;flex:1 0 100%;gap:5px 8px}
+  body[data-page=attacker] header>nav a,body[data-page=attacker] header>nav button{min-height:40px;padding:8px 10px;font-size:12px}
+  body[data-page=attacker] .sidebar{top:0;padding:6px 10px}
+  body[data-page=attacker] main{padding:15px 12px}
+  body[data-page=attacker] .panel{padding:15px}
+  body[data-page=attacker] .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  body[data-page=attacker] .secondary-metrics .stats,body[data-page=attacker] .panel .grid{grid-template-columns:minmax(0,1fr)}
+  body[data-page=attacker] .simulation-card button{width:100%}
+}
+
+@media(max-width:360px){
+  .dashboard-page .dashboard-kpis{grid-template-columns:minmax(0,1fr)}
+  .dashboard-analytics .analytics-live{align-self:flex-start}
+  .brand{font-size:13px}
+  .brand-mark{width:27px;height:27px}
+  .theme-toggle{font-size:11px}
+  .secondary-metrics .stats{grid-template-columns:minmax(0,1fr)}
+}
+
+@media(hover:none){button:hover,.btn:hover{transform:none}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+/* Canonical table behavior: preserve columns; let each wrapper scroll. */
+.table-scroll,.scroll{display:block;width:100%;max-width:100%;min-width:0;overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.table-scroll>table,.scroll>table{display:table;width:max-content;min-width:max(100%,680px);max-width:none;table-layout:auto;border-collapse:collapse}
+.table-scroll th,.table-scroll td,.scroll th,.scroll td{padding:11px 12px;white-space:nowrap;word-break:normal;overflow-wrap:normal;vertical-align:top}
+.table-scroll th,.scroll th{white-space:nowrap;word-break:normal;overflow-wrap:normal}
+.table-scroll td.cell-wrap,.scroll td.cell-wrap,.table-scroll td.scan-target{white-space:normal;word-break:normal;overflow-wrap:anywhere}
+.table-scroll table.message-table{min-width:810px}
+.table-scroll table.message-table th:nth-child(1),.table-scroll table.message-table td:nth-child(1){min-width:72px}
+.table-scroll table.message-table th:nth-child(2),.table-scroll table.message-table td:nth-child(2),.table-scroll table.message-table th:nth-child(3),.table-scroll table.message-table td:nth-child(3){min-width:135px}
+.table-scroll table.message-table th:nth-child(4),.table-scroll table.message-table td:nth-child(4){min-width:180px}
+.table-scroll table.message-table th:nth-child(5),.table-scroll table.message-table td:nth-child(5){min-width:185px}
+.table-scroll table.message-table th:nth-child(6),.table-scroll table.message-table td:nth-child(6){min-width:100px}
+.table-scroll table.events-table{min-width:1040px}
+.table-scroll table.events-table th:nth-child(1),.table-scroll table.events-table td:nth-child(1){min-width:170px}
+.table-scroll table.events-table th:nth-child(2),.table-scroll table.events-table td:nth-child(2){min-width:170px}
+.table-scroll table.events-table th:nth-child(3),.table-scroll table.events-table td:nth-child(3){min-width:115px}
+.table-scroll table.events-table th:nth-child(4),.table-scroll table.events-table td:nth-child(4){min-width:130px}
+.table-scroll table.events-table th:nth-child(5),.table-scroll table.events-table td:nth-child(5){min-width:140px}
+.table-scroll table.events-table th:nth-child(6),.table-scroll table.events-table td:nth-child(6){min-width:320px}
+.table-scroll table.compact-table{width:100%;min-width:0;table-layout:fixed}
+.table-scroll table.compact-table th,.table-scroll table.compact-table td{white-space:normal;word-break:normal;overflow-wrap:anywhere}
+.table-scroll .badge,.scroll .tag,.scroll .badge{white-space:nowrap;word-break:normal;overflow-wrap:normal}
+
+/* The attacker event feed is wide by design; preserve readable columns and
+   contain its horizontal scroll inside the event table wrapper. */
+.scroll>table.event-stream-table{width:max-content;min-width:980px;max-width:none;table-layout:auto}
+.scroll>table.event-stream-table th:nth-child(1),.scroll>table.event-stream-table td:nth-child(1){min-width:170px}
+.scroll>table.event-stream-table th:nth-child(2),.scroll>table.event-stream-table td:nth-child(2){min-width:120px}
+.scroll>table.event-stream-table th:nth-child(3),.scroll>table.event-stream-table td:nth-child(3){min-width:190px}
+.scroll>table.event-stream-table th:nth-child(4),.scroll>table.event-stream-table td:nth-child(4){min-width:150px}
+.scroll>table.event-stream-table th:nth-child(5),.scroll>table.event-stream-table td:nth-child(5){min-width:350px}

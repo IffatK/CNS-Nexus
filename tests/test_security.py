@@ -144,7 +144,10 @@ def test_https_required_blocks_plain_http(tmp_path):
 
 def test_security_headers(client):
     r = client.get("/login")
-    assert "default-src 'self'" in r.headers["Content-Security-Policy"]
+    csp = r.headers["Content-Security-Policy"]
+    assert "default-src 'self'" in csp
+    assert "style-src 'self' https://fonts.googleapis.com" in csp
+    assert "font-src 'self' https://fonts.gstatic.com" in csp
     assert r.headers["X-Frame-Options"] == "DENY" and r.headers["X-Content-Type-Options"] == "nosniff"
     assert r.headers["Cache-Control"] == "no-store"
 

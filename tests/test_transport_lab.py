@@ -183,6 +183,40 @@ def test_attacker_console_requires_admin(app):
     assert ordinary.get("/attacker").status_code == 403
 
 
+def test_client_users_cannot_discover_or_message_admin_accounts(app):
+    admin = operator(app)
+    ordinary = app.test_client()
+    assert register(ordinary, "alice").status_code == 302
+    assert login(ordinary, "alice").status_code == 302
+
+    compose = ordinary.get("/compose")
+    files = ordinary.get("/files")
+    assert compose.status_code == 200 and b'value="admin"' not in compose.data
+    assert files.status_code == 200 and b'value="admin"' not in files.data
+    assert ordinary.get("/attacker").status_code == 403
+
+    # All message transports resolve recipients through the role-aware lookup.
+    assert ordinary.post("/api/messages", json={"recipient": "admin", "body": "hello"}).status_code == 404
+    assert ordinary.post("/api/lab/send-plain", json={"recipient": "admin", "body": "hello"}).status_code == 404
+    assert ordinary.post("/compose", data={"recipient": "admin", "body": "hello"}).status_code == 404
+    assert admin.get("/api/attacker/events").status_code == 200
+
+
+def test_configured_admin_name_is_hidden_even_if_legacy_role_flag_is_false(app):
+    admin = operator(app)
+    with app.app_context():
+        from models import User
+        account = User.query.filter_by(username="admin").one()
+        account.is_admin = False  # simulate a legacy/misconfigured row
+        db.session.commit()
+
+    ordinary = app.test_client()
+    assert register(ordinary, "alice").status_code == 302
+    assert login(ordinary, "alice").status_code == 302
+    assert b'value="admin"' not in ordinary.get("/compose").data
+    assert ordinary.post("/api/messages", json={"recipient": "admin", "body": "hello"}).status_code == 404
+
+
 def test_client_and_attacker_routes_render_distinct_pages(app):
     from flask import template_rendered
 

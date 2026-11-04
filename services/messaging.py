@@ -11,6 +11,7 @@ from services.crypto import (CryptoError, DecryptionError, SignatureError, decry
                              encrypt_and_sign,
                              public_key_from_b64, reencrypt_without_resigning, verify_envelope)
 from services.security_log import log_event
+from services.roles import client_users, is_admin_identity
 
 
 class MessagingError(Exception):
@@ -32,10 +33,15 @@ def keys():
     return current_app.extensions["cns_keys"]
 
 
-def find_user(username):
+def find_user(username, sender=None):
     if not isinstance(username, str):
         return None
-    return User.query.filter_by(username=username.strip().lower()).first()
+    query = User.query.filter_by(username=username.strip().lower())
+    # Client accounts never discover or address admin accounts. Admin
+    # operators may still address ordinary client accounts when needed.
+    if sender is None or not is_admin_identity(sender):
+        query = client_users(query)
+    return query.first()
 
 
 def send_message(sender, recipient_username, body, protection="protected"):
@@ -45,7 +51,7 @@ def send_message(sender, recipient_username, body, protection="protected"):
         raise MessagingError("Message body is empty", 400)
     if len(body) > current_app.config["MAX_MESSAGE_CHARS"]:
         raise MessagingError(f"Message too long (max {current_app.config['MAX_MESSAGE_CHARS']} characters)", 400)
-    recipient = find_user(recipient_username)
+    recipient = find_user(recipient_username, sender)
     if recipient is None:
         log_event("message_rejected", "info", user=sender, detail="unknown recipient")
         raise MessagingError("Recipient not found", 404)
@@ -74,7 +80,7 @@ def prepare_intercepted_envelope(sender, recipient_username, body):
         raise MessagingError("'recipient' and non-empty 'body' are required", 400)
     if len(body) > current_app.config["MAX_MESSAGE_CHARS"]:
         raise MessagingError(f"Message too long (max {current_app.config['MAX_MESSAGE_CHARS']} characters)", 400)
-    recipient = find_user(recipient_username)
+    recipient = find_user(recipient_username, sender)
     if recipient is None:
         raise MessagingError("Recipient not found", 404)
     if rate_limit.send_throttled(sender.id):
@@ -96,6 +102,10 @@ def get_authorized_message(msg_id, viewer):
     if viewer.id not in (msg.sender_id, msg.recipient_id):
         log_event("access_denied", "warning", user=viewer, detail=f"IDOR attempt on message {msg_id}")
         raise NotFound()
+    if not is_admin_identity(viewer):
+        counterpart = msg.recipient if msg.sender_id == viewer.id else msg.sender
+        if is_admin_identity(counterpart):
+            raise NotFound()
     return msg
 
 
@@ -159,7 +169,12 @@ def summary(msg, viewer, with_status=True):
 
 def mailbox(viewer, box, limit=100):
     col = Message.recipient_id if box == "inbox" else Message.sender_id
-    return Message.query.filter(col == viewer.id).order_by(Message.id.desc()).limit(limit).all()
+    query = Message.query.filter(col == viewer.id)
+    if not is_admin_identity(viewer):
+        counterpart_id = Message.sender_id if box == "inbox" else Message.recipient_id
+        query = query.join(User, counterpart_id == User.id)
+        query = client_users(query)
+    return query.order_by(Message.id.desc()).limit(limit).all()
 
 
 def mailbox_query(viewer, box, filters=None):
@@ -167,6 +182,10 @@ def mailbox_query(viewer, box, filters=None):
     filters = filters or {}
     col = Message.recipient_id if box == "inbox" else Message.sender_id
     query = Message.query.filter(col == viewer.id)
+    if not is_admin_identity(viewer):
+        counterpart_id = Message.sender_id if box == "inbox" else Message.recipient_id
+        query = query.join(User, counterpart_id == User.id)
+        query = client_users(query)
     term = (filters.get("q") or "").strip()[:100]
     if term:
         pattern = f"%{term}%"

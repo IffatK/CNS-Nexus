@@ -13,17 +13,21 @@
 {% macro sev(s) %}<span class="badge {{ 'ok' if s == 'info' else 'warn' if s == 'warning' else 'bad' }}">{{ s }}</span>{% endmacro %}
 {% macro mtable(rows, empty) %}
 {% if rows %}
-<table><thead><tr><th>#</th><th>From</th><th>To</th><th>Time (UTC)</th><th>Signature</th><th></th></tr></thead><tbody>
-{% for r in rows %}<tr><td>{{ r.id }}</td><td>{{ r.sender }}</td><td>{{ r.recipient }}</td><td>{{ r.created_at }}</td>
-<td>{{ badge(r.verification) }}</td><td><a href="{{ url_for('messaging.detail', msg_id=r.id) }}">open</a></td></tr>{% endfor %}
+<div class="table-scroll" role="region" aria-label="Message list" tabindex="0">
+<table class="message-table"><thead><tr><th>#</th><th>From</th><th>To</th><th>Time (UTC)</th><th>Signature</th><th></th></tr></thead><tbody>
+{% for r in rows %}<tr><td>#{{ r.id }}</td><td>{{ r.sender }}</td><td>{{ r.recipient }}</td><td>{{ r.created_at }}</td>
+<td>{{ badge(r.verification) }}</td><td><a href="{{ url_for('messaging.detail', msg_id=r.id) }}">Open</a></td></tr>{% endfor %}
 </tbody></table>
+</div>
 {% else %}<p class="empty">{{ empty }}</p>{% endif %}
 {% endmacro %}
 {% macro events_table(rows, empty) %}
 {% if rows %}
-<table><thead><tr><th>Time (UTC)</th><th>Type</th><th>Severity</th><th>User</th><th>IP</th><th>Detail</th></tr></thead><tbody>
+<div class="table-scroll" role="region" aria-label="Security event list" tabindex="0">
+<table class="events-table"><thead><tr><th>Time (UTC)</th><th>Type</th><th>Severity</th><th>User</th><th>IP</th><th>Detail</th></tr></thead><tbody>
 {% for e in rows %}<tr><td>{{ e.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td><td>{{ e.event_type }}</td><td>{{ sev(e.severity) }}</td>
-<td>{{ e.username or '-' }}</td><td>{{ e.ip or '-' }}</td><td>{{ e.detail }}</td></tr>{% endfor %}
+<td>{{ e.username or '-' }}</td><td>{{ e.ip or '-' }}</td><td class="cell-wrap">{{ e.detail }}</td></tr>{% endfor %}
 </tbody></table>
+</div>
 {% else %}<p class="empty">{{ empty }}</p>{% endif %}
 {% endmacro %}

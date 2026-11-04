@@ -1,44 +1,27 @@
-.venv/
-__pycache__/
-*.pyc
-.pytest_cache/
-.env
-instance/
-*.db
-*.key
-*.pem
-*.pcap
-*.pcapng
-kali/results/
-kali/captures/
-
-
-# ==============================
-# Python
-# ==============================
+# Python bytecode and virtual environments
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .python-version
-
-# Virtual environments
 .venv/
 venv/
 env/
 ENV/
 
-# ==============================
-# Environment variables & secrets
-# ==============================
+# Environment variables and deployment secrets
 .env
 .env.*
 !.env.example
 !.env.sample
+*.local
 
-# Secret keys and private certificates
+# Private keys, certificates, and credentials
 *.key
 *.pem
+*.crt
+*.cer
+*.der
 *.p12
 *.pfx
 *.jks
@@ -46,20 +29,25 @@ ENV/
 private_key*
 secret_key*
 
-# ==============================
-# Flask & local databases
-# ==============================
+# Application state, databases, uploaded files, and backups
 instance/
 *.db
 *.sqlite
 *.sqlite3
+*.db-wal
+*.db-shm
+*.sqlite-wal
+*.sqlite-shm
+backups/
+*.dump
+*.backup
 
-# ==============================
-# Pytest & test artifacts
-# ==============================
+# Test and coverage output
 .pytest_cache/
 .pytest-*/
 .pytest*/
+.codex-pytest-*/
+.codex-test-run-metrics/
 .test-tmp/
 .test-tmp*/
 cns_pytest_temp_run/
@@ -71,9 +59,7 @@ test-results/
 junit.xml
 pytest-results*.xml
 
-# ==============================
-# Generated logs & temporary files
-# ==============================
+# Logs and temporary editor/system files
 *.log
 *.tmp
 *.temp
@@ -84,9 +70,13 @@ pytest-results*.xml
 .DS_Store
 Thumbs.db
 
-# ==============================
-# Generated documentation previews
-# ==============================
+# Local scanner/network captures
+kali/results/
+kali/captures/
+*.pcap
+*.pcapng
+
+# Generated document previews
 .doc_render/
 .rendered/
 *.aux
@@ -96,4 +86,3 @@ Thumbs.db
 *.fls
 *.out
 *.synctex.gz
-

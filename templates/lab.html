@@ -5,7 +5,7 @@
 <p>These run the real cryptographic code at request time using ephemeral keys (the 'audit' test reads your stored messages). Results are computed live and logged as security events.</p>
 <button class="btn" data-lab="all">Run all tests</button>
 {% for t in tests %}<button class="btn secondary" data-lab="{{ t }}">{{ t }}</button> {% endfor %}
-<table id="lab-results" hidden><thead><tr><th>Test</th><th>Expected</th><th>Observed</th><th>Result</th></tr></thead><tbody></tbody></table>
+<div class="table-scroll" role="region" aria-label="Lab test results" tabindex="0"><table id="lab-results" hidden><thead><tr><th>Test</th><th>Expected</th><th>Observed</th><th>Result</th></tr></thead><tbody></tbody></table></div>
 <p id="lab-msg" class="hint"></p></section>
 <section class="card"><h2>Your logged lab runs</h2>{{ events_table(events, "No lab tests have been run yet.") }}</section>
 <section class="card"><h2>Network tests from Kali</h2><p>See <code>kali/lab_tests.py</code> and <code>docs/testing.md</code>. Those results come from real HTTP requests and appear in the Events page.</p></section>

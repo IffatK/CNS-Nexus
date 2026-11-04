@@ -8,18 +8,19 @@
   <h2>Scan a file</h2>
   {% if engine_available %}<p><span class="badge ok">ClamAV available</span> · maximum {{ max_mb }} MB</p>
   {% else %}<div class="flash warning"><b>Scanner unavailable.</b> Uploads will be recorded as SCAN FAILED, never CLEAN. On Ubuntu install it with <code>sudo apt install clamav clamav-freshclam</code>, then check the updater using <code>systemctl status clamav-freshclam</code>. Let that service update signatures; do not run a second updater while it is active.</div>{% endif %}
-  <form method="post" action="{{ url_for('virus_scanner.scan_upload') }}" enctype="multipart/form-data">
+  <form method="post" action="{{ url_for('virus_scanner.scan_upload') }}" enctype="multipart/form-data" data-upload-progress>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label for="file">File to scan</label><input id="file" type="file" name="file" accept=".txt,.csv,.pdf,.png,.jpg,.jpeg,.gif,.docx,.xlsx,.pptx,.docm,.xlsm,.pptm,.zip,.7z" required>
     <p class="hint">Supported types: documents, images, text and archives. Maximum {{ max_mb }} MB. Uploaded bytes are held in a private temporary folder and deleted after scanning.</p>
-    <button type="submit">Scan file</button>
+    <button type="submit">Scan file</button><div class="upload-progress" role="status" aria-live="polite" hidden><span class="spinner" aria-hidden="true"></span><span>Uploading and scanning locally with ClamAV…</span></div>
   </form>
 </section>
 <section class="card">
   <div class="row-between"><div><div class="eyebrow">Database-backed results</div><h2>Recent scans</h2></div></div>
   <form class="filters" method="get" action="{{ url_for('virus_scanner.page') }}"><label>From<input type="date" name="date_from" value="{{ date_from }}"></label><label>To<input type="date" name="date_to" value="{{ date_to }}"></label><button type="submit">Filter scan history</button><a class="btn secondary" href="{{ url_for('virus_scanner.export_csv', date_from=date_from, date_to=date_to) }}">Download filtered CSV report</a></form>
   {% if rows %}<div class="table-scroll"><table><thead><tr><th>Scan</th><th>File</th><th>Status</th><th>Engine / definitions</th><th>Detection / error</th><th>UTC</th></tr></thead><tbody>
-  {% for row in rows %}<tr id="scan-{{ row.id }}"><td><a href="{{ url_for('virus_scanner.report', scan_id=row.id) }}">#{{ row.id }}</a></td><td>{{ row.filename }}<br><span class="hint">{{ row.size_bytes }} bytes · SHA-256 {{ row.sha256[:16] }}…</span></td><td>{% if row.status == 'clean' %}<span class="badge ok">CLEAN</span>{% elif row.status == 'infected' %}<span class="badge bad">INFECTED</span>{% elif row.status == 'suspicious' %}<span class="badge warning">SUSPICIOUS</span>{% else %}<span class="badge bad">SCAN FAILED</span>{% endif %}</td><td>{{ row.engine }}<br><span class="hint">defs {{ row.definitions }} · {{ row.duration_ms }} ms</span></td><td>{{ row.detection or row.error or 'No detections' }}</td><td>{{ row.created_at }} UTC</td></tr>{% endfor %}
+  {% for row in rows %}<tr id="scan-{{ row.id }}"><td><a href="{{ url_for('virus_scanner.report', scan_id=row.id) }}">#{{ row.id }}</a></td><td class="cell-wrap">{{ row.filename }}<br><span class="hint">{{ row.size_bytes }} bytes · SHA-256 {{ row.sha256[:16] }}…</span></td><td>{% if row.status == 'clean' %}<span class="badge ok">CLEAN</span>{% elif row.status == 'infected' %}<span class="badge bad">INFECTED</span>{% elif row.status == 'suspicious' %}<span class="badge warning">SUSPICIOUS</span>{% else %}<span class="badge bad">SCAN FAILED</span>{% endif %}</td><td>{{ row.engine }}<br><span class="hint">defs {{ row.definitions }} · {{ row.duration_ms }} ms</span></td><td class="cell-wrap">{{ row.detection or row.error or 'No detections' }}</td><td>{{ row.created_at }} UTC</td></tr>{% endfor %}
   </tbody></table></div>{% else %}<p class="empty">No scan reports yet. Upload a sample file to begin.</p>{% endif %}
 </section>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/upload-progress.js', v=asset_version('js/upload-progress.js')) }}" defer></script>{% endblock %}

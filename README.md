@@ -1,45 +1,111 @@
 # CNS Security Lab
 
-An educational Flask security lab for encrypted messaging, signature verification, an explicitly authorized manual relay, malware scanning, private file sharing, account security, and audit events. Use it only on an isolated VirtualBox host-only network.
+An educational Flask lab for secure messaging, signature verification, an authorized manual relay, file scanning and sharing, and account security.
 
-## Three-machine topology
+> **For learning and demonstrations only.** Run the three-VM lab on an isolated VirtualBox host-only network. This project is not production security software: the server controls message keys, and browser transport encryption is educational rather than end-to-end encryption. See [Security limitations](docs/limitations.md).
+
+## Contents
+
+- [What’s included](#whats-included)
+- [Lab network](#lab-network)
+- [Run on Ubuntu](#run-on-ubuntu)
+- [Open the portals](#open-the-portals)
+- [Database and deployment](#database-and-deployment)
+- [Tests and documentation](#tests-and-documentation)
+
+## What’s included
+
+- AES-GCM message storage and Ed25519 signature verification
+- Admin-only manual message relay for authorized lab demonstrations
+- ClamAV file scanning, private file sharing, and SHA-256 integrity checks
+- Account session management, security events, and dashboard charts
+- Responsive client and attacker interfaces
+
+## Lab network
 
 | Machine | Role | Example host-only IP |
-|---|---|---|
-| Windows | User portal, first account | `192.168.56.1` |
-| Ubuntu | Flask/SQLite/key host and authorized attacker console | `192.168.56.102` |
-| Kali | User portal, second account | `192.168.56.101` |
+| --- | --- | --- |
+| Windows | Client portal | `192.168.56.1` |
+| Ubuntu | Flask app, database and keys, admin console | `192.168.56.102` |
+| Kali | Client portal | `192.168.56.101` |
 
-Ubuntu runs the app and owns the server-side keys. Windows and Kali are user clients. Open the attacker console locally on Ubuntu at `/attacker`; it is administrator-only. From Windows and Kali, use the user portal. Make sure all three VMs use the same host-only network and do not expose this development server to a bridged or public interface.
+Ubuntu owns the server-side keys. Windows and Kali are clients. Keep all three VMs on the same host-only network; do not expose the Flask development server through a bridged or public interface.
 
-## Ubuntu setup
+## Run on Ubuntu
 
-Install packages and ClamAV:
+### 1. Install system packages
 
 ```bash
 sudo apt update
 sudo apt install -y python3-venv python3-pip openssl clamav clamav-freshclam
-clamscan --version
 ```
 
-Ubuntu's `clamav-freshclam` service normally owns database updates. Check it with `systemctl status clamav-freshclam` and
-let it finish updating; do not run a second `sudo freshclam` while that service is active (both processes use the same
-update log/database lock). If you need a one-time manual update, stop the service, run the updater, then start the service:
-`sudo systemctl stop clamav-freshclam && sudo freshclam && sudo systemctl start clamav-freshclam`.
-
-From the project directory, create/activate the existing virtual environment if needed, install requirements, generate a TLS certificate if you do not already have a trusted lab certificate, then initialize safely:
+Let Ubuntu’s `clamav-freshclam` service update the virus definitions. Check it with:
 
 ```bash
-python3 -m venv .venv        # only if .venv does not already exist
+systemctl status clamav-freshclam
+```
+
+Avoid running `sudo freshclam` while that service is active; both processes use the same database lock.
+
+### 2. Install Python dependencies
+
+Run these commands from the project directory:
+
+```bash
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-python3 scripts/generate_lab_tls.py --ip 192.168.56.102
+```
+
+If the project is inside a VirtualBox shared folder and creating `.venv` there fails, keep the environment on Ubuntu’s local filesystem instead:
+
+```bash
+python3 -m venv ~/.venvs/cns-security-lab
+source ~/.venvs/cns-security-lab/bin/activate
+pip install -r requirements.txt
+```
+
+### 3. Initialize the app
+
+For a normal local checkout:
+
+```bash
 python3 scripts/init_db.py
 ```
 
-`init_db.py` creates `.env` only if absent, creates keys only for a new empty instance, and makes a dated backup when an existing DB/key store is present. It never regenerates a missing key for a populated DB. The app applies only its supported additive SQLite migrations after making a backup. Keep the existing `.env`, `instance/`, database, and keys when updating code; never replace them with a fresh copy.
+If your project is in a VirtualBox shared folder, keep the database, keys, TLS files, and uploaded files on Ubuntu’s local filesystem. For a **new** instance, initialize it with a local data directory:
 
-For HTTPS, edit `.env` on Ubuntu and set at least:
+```bash
+mkdir -p ~/cns-security-lab-data
+python3 scripts/init_db.py --instance-dir "$HOME/cns-security-lab-data"
+```
+
+Then set the same absolute path in the project’s `.env` before starting the app:
+
+```dotenv
+CNS_INSTANCE_DIR=/home/your-ubuntu-username/cns-security-lab-data
+```
+
+Replace the example path with your Ubuntu username. For an existing installation, do not switch instance directories or initialize a replacement database until you have backed up and moved the existing database and keys. See [VirtualBox data move instructions](docs/three-vm-operations.md).
+
+`init_db.py` leaves an existing `.env` and master key in place. It backs up existing local data before supported schema updates. Never regenerate keys for a populated database.
+
+### 4. Configure trusted lab HTTPS
+
+The app requires HTTPS by default. If you do not already have a trusted certificate for this lab, generate one once on Ubuntu:
+
+```bash
+python3 scripts/generate_lab_tls.py --ip 192.168.56.102
+```
+
+If `CNS_INSTANCE_DIR` is outside the project, generate the certificate there instead. For example:
+
+```bash
+python3 scripts/generate_lab_tls.py --ip 192.168.56.102 --output "$HOME/cns-security-lab-data/tls"
+```
+
+The script will not overwrite existing TLS files. In Ubuntu’s `.env`, check these settings:
 
 ```dotenv
 REQUIRE_HTTPS=1
@@ -50,74 +116,75 @@ APP_HOST=0.0.0.0
 APP_PORT=5000
 ```
 
-Keep the generated `lab.key` only on Ubuntu. Copy **only** `lab.crt` to Windows and Kali, then trust it as a root certificate on each client VM. Windows (elevated PowerShell): `certutil -addstore -f Root lab.crt`. Kali: `sudo install -m 0644 lab.crt /usr/local/share/ca-certificates/cns-lab.crt && sudo update-ca-certificates`. The generated certificate is self-signed for this isolated lab; clients must trust it before using browser cryptography. If a CA certificate already exists for the lab, use that instead of generating a replacement.
+If `CNS_INSTANCE_DIR` points somewhere else, set `TLS_CERT_FILE` and `TLS_KEY_FILE` to the matching absolute paths there (for example `/home/your-ubuntu-username/cns-security-lab-data/tls/lab.crt` and `.../lab.key`). Keep the private `lab.key` on Ubuntu. Copy only `lab.crt` to the client VMs and trust it there.
 
-Start the server from the project directory:
+On Windows, in elevated PowerShell:
+
+```powershell
+certutil -addstore -f Root lab.crt
+```
+
+On Kali:
+
+```bash
+sudo install -m 0644 lab.crt /usr/local/share/ca-certificates/cns-lab.crt
+sudo update-ca-certificates
+```
+
+Use the certificate only in this isolated lab. If your organization already provides a lab CA, use its certificate instead.
+
+### 5. Start Flask
 
 ```bash
 source .venv/bin/activate
 python3 app.py
 ```
 
-The `.env` paths for the instance and TLS files are resolved from this project directory, even if a shell starts `app.py` from elsewhere. This prevents Flask from silently selecting a second `instance/` directory. The current checked-in runtime settings require HTTPS; startup will correctly stop if `instance/tls/lab.crt` or `instance/tls/lab.key` is missing. Do not initialize a replacement database or regenerate the message master key to work around that error. Restore the existing TLS pair from the Ubuntu host backup, or, for an isolated local HTTP development run only, explicitly clear the TLS paths and secure-cookie requirement for that process:
+If you created the virtual environment under `~/.venvs`, activate that path instead. Keep the app running in the terminal while using the lab.
 
-```bash
-REQUIRE_HTTPS=0 SESSION_COOKIE_SECURE=0 TLS_CERT_FILE= TLS_KEY_FILE= python3 app.py
-```
+## Open the portals
 
-That development listener is plain HTTP and does not provide browser transport encryption; use a trusted HTTPS listener for protected browser submissions and shared lab use.
+Use the same HTTPS origin from all lab VMs:
 
-The default ClamAV scan timeout is 120 seconds to allow a cold scanner to load definitions on a small VM. Existing `.env`
-files are preserved; add `CLAMSCAN_TIMEOUT=120` there and restart the app if scans still use the old 30-second setting.
-The app refuses to start if HTTPS is required but the configured certificate or private key is missing. Use the same HTTPS origin from both clients:
+- Client portal: `https://192.168.56.102:5000/`
+- Admin attacker console: `https://192.168.56.102:5000/attacker`
+- Virus scanner: `https://192.168.56.102:5000/virus-scanner`
+- File sharing: `https://192.168.56.102:5000/files`
+- Security events: `https://192.168.56.102:5000/events`
 
-- User portal: `https://192.168.56.102:5000/`
-- Attacker console (Ubuntu admin only): `https://192.168.56.102:5000/attacker`
-- Virus Detection: `https://192.168.56.102:5000/virus-scanner`
-- File Sharing: `https://192.168.56.102:5000/files`
-- Security Events: `https://192.168.56.102:5000/events`
+Register separate accounts for the admin and client roles. `ADMIN_USERNAMES` in `.env` lists usernames assigned the admin role at registration. Client accounts cannot access the attacker console or address admin accounts as message or file recipients.
 
-Register the `admin` account first if the configured `ADMIN_USERNAMES` includes `admin`, then register separate user accounts for Windows and Kali. The first account is not automatically privileged unless its name is configured as an administrator.
+Useful pages include `/dashboard`, `/compose`, `/inbox`, `/sent`, `/notifications`, and `/events.csv`. The API endpoints `/api/dashboard/metrics` and `/api/diagnostics` require authentication.
 
-## Tests and diagnostics
+## Database and deployment
+
+SQLite is the default for the isolated lab. Supabase PostgreSQL is also supported through `DATABASE_URL`. The app keeps its master key, signing keys, TLS private key, and shared file contents in `CNS_INSTANCE_DIR`; Supabase stores relational records only. A database URL change does not migrate SQLite data automatically. Back up the database and instance directory together.
+
+For a free public demo setup using an Ubuntu VM, Supabase, Gunicorn, and Caddy, follow the [free deployment guide](docs/free-deployment-oracle-supabase.md). The public deployment guide has additional limits and backup requirements. Do not treat the educational app as a service for real confidential data.
+
+Keep `.env`, database credentials, backups, keys, and `instance/` out of Git; the repository’s `.gitignore` covers local secrets and generated files. The deployment guide explains the Supabase connection setup.
+
+## Tests and documentation
+
+Run tests from the project directory:
 
 ```bash
 source .venv/bin/activate
 python3 -m pytest
+```
+
+Check service health against the lab certificate:
+
+```bash
 python3 scripts/health_check.py https://192.168.56.102:5000 --ca-cert instance/tls/lab.crt
 ```
 
-## Three-VM operator quick reference
+More detail:
 
-Use one URL scheme and hostname consistently in the browser. If Flask is serving HTTPS, use `https://192.168.56.102:5000` from Windows and Kali after trusting only the lab's public certificate. The admin operator uses `/attacker` on Ubuntu. If Flask is serving HTTP, use `http://192.168.56.102:5000` everywhere; browser transport encryption is unavailable over HTTP, but unprotected relay demonstrations still work. A TLS client sent to the HTTP listener produces binary-looking HTTP 400 log lines; that is a scheme/port mismatch, not a ClamAV or CSRF error.
-
-Useful pages and endpoints:
-
-- User portal and command dashboard: `/dashboard`
-- Manual attacker relay (Ubuntu admin only): `/attacker`
-- Live chart data (authenticated): `/api/dashboard/metrics`
-- Component diagnostics (authenticated): `/api/diagnostics`
-- Security notifications: `/notifications`
-- Security events CSV report: `/events.csv`
-- Virus Detection and scan report: `/virus-scanner` and `/virus-scanner/reports.csv`
-- Private file sharing and SHA-256 verification: `/files`
-
-The dashboard charts use stored security events, current signature checks over authorized messages, intercepted-message states, login-attempt records, scan records, and file-integrity events. Severity shows only the application's stored `info`, `warning`, and `critical` values. Notifications are per-account records derived from warning/critical events and selected account-security events. Only CSV reports are implemented; a PDF export is not configured.
-
-The relay-specific CSRF bug was in `templates/attacker.html`: it is a standalone page and did not load the shared `static/js/app.js` helper. Its JavaScript called `window.cnsPostJSON`, which fetches a current Flask-WTF token and sends `X-CSRFToken`; without that script, attacker relay actions could not submit correctly. The page now loads the helper before `attacker.js`, and a regression test checks the script order. CSRF remains enabled. Separately, the supplied binary-looking HTTP 400 logs indicate that an HTTPS/TLS client reached an HTTP listener; use the same scheme on Flask and in all three VM browsers.
-
-Static CSS and JavaScript URLs include a SHA-256 content version, so changed files get new URLs even when deploys preserve timestamps. Rendered pages are sent without caching. This project does not register a service worker. If an older browser profile still behaves differently, open the exact lab origin and clear that origin's site data, unregister any old CNS service worker if one appears under browser developer tools → Application → Service Workers, then hard reload. Use the same scheme, hostname, and port in normal and private windows; HTTP and HTTPS cookies belong to separate origins, and an old session cookie can refer to a different app/database copy.
-
-For VirtualBox shared-folder deployments, source edits should remain under `/media/sf_cnsproject/cns-security-lab`, while SQLite, keys, uploads, and TLS private keys are safer on Ubuntu's local filesystem. Stop Flask before taking a backup or copying the instance. See [docs/three-vm-operations.md](docs/three-vm-operations.md) for a data-preserving move procedure; it copies the existing database and keys and never regenerates them.
-
-Tests mock ClamAV where appropriate. Real scans require installed ClamAV and updated definitions. A missing or failed scanner never results in a `CLEAN` status. See [docs/testing.md](docs/testing.md), [docs/architecture.md](docs/architecture.md), [docs/limitations.md](docs/limitations.md), and [docs/transport-demo.md](docs/transport-demo.md).
-
-## Capabilities and security boundaries
-
-- Messages use AES-256-GCM and Ed25519; inbox and sent pages filter metadata server-side and paginate results. Invalid signatures never return plaintext.
-- Plaintext lab submissions are held by Ubuntu's relay until an administrator explicitly forwards the unchanged original, forwards an edited copy, or drops it. Edited content retains the sender's original signature and fails recipient verification.
-- Virus Detection stores scan metadata, not the uploaded scan bytes. File sharing accepts only files ClamAV scanned clean; shares are private, revocable, and downloads verify SHA-256.
-- Account Security shows active/revoked sessions, allows session revocation, and changes passwords only after current-password verification.
-- Security-event and scan CSV exports apply spreadsheet-formula escaping and the caller's authorization scope.
-
-The service is an educational development server, not a production deployment. The server controls the message keys, so this is not end-to-end encryption. See the limitations document before presenting the lab.
+- [Architecture](docs/architecture.md)
+- [Security limitations](docs/limitations.md)
+- [Threat model](docs/threat_model.md)
+- [Three-VM operations](docs/three-vm-operations.md)
+- [Testing](docs/testing.md)
+- [Transport demonstration](docs/transport-demo.md)
+- [Free deployment](docs/free-deployment-oracle-supabase.md)

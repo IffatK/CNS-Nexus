@@ -18,11 +18,19 @@ def create_app(overrides=None):
     app = Flask(__name__)
     app.config.from_object(Config)
     app.config.update(overrides or {})
+    if app.config.get("TRUST_PROXY"):
+        # Trust one local reverse proxy (for example Caddy) for the original
+        # scheme, host, port, and client address. Keep Gunicorn on loopback.
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
     if not app.config.get("SECRET_KEY"):
         raise RuntimeError("SECRET_KEY is not set. Run: python3 scripts/init_db.py (creates .env) or set it in the environment.")
     inst = Path(app.config["INSTANCE_DIR"])
     inst.mkdir(parents=True, exist_ok=True)
-    app.config.setdefault("SQLALCHEMY_DATABASE_URI", "sqlite:///" + (inst / "cns_lab.db").as_posix())
+    explicit_test_database = (overrides or {}).get("SQLALCHEMY_DATABASE_URI")
+    if (not app.config.get("SQLALCHEMY_DATABASE_URI")
+            or (app.config.get("TESTING") and not explicit_test_database)):
+        app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + (inst / "cns_lab.db").as_posix()
     app.config.setdefault("KEY_DIR", str(inst / "keys"))
     app.extensions["cns_keys"] = KeyManager(app.config["KEY_DIR"], auto_init=app.config["AUTO_INIT_KEYS"])
 
@@ -45,12 +53,17 @@ def create_app(overrides=None):
         if "security_findings" in existing_tables:
             finding_columns = {c["name"] for c in inspect(db.engine).get_columns("security_findings")}
             needs_upgrade_backup = needs_upgrade_backup or not {"remediation_steps_json", "verification_steps_json"}.issubset(finding_columns)
-        if needs_upgrade_backup:
+        database_dialect = db.engine.dialect.name
+        if needs_upgrade_backup and database_dialect == "sqlite":
             # Snapshot the current instance once before additive table/column upgrades.
             from scripts.backup_instance import backup
             backup(inst)
         db.create_all()  # creates new lab telemetry/settings tables; existing tables are unchanged
-        # Add the truthful message-mode marker to existing SQLite lab databases in place.
+        # Apply the small additive upgrades supported by the existing schema.
+        # SQLite uses BLOB/0 defaults; PostgreSQL uses BYTEA/false.
+        is_postgres = database_dialect == "postgresql"
+        bool_default = "FALSE" if is_postgres else "0"
+        binary_type = "BYTEA" if is_postgres else "BLOB"
         migrations = []
         table_names = inspect(db.engine).get_table_names()
         if "messages" in table_names:
@@ -60,13 +73,13 @@ def create_app(overrides=None):
             if "relay_ip" not in columns:
                 migrations.append("ALTER TABLE messages ADD COLUMN relay_ip VARCHAR(45)")
             if "relay_report" not in columns:
-                migrations.append("ALTER TABLE messages ADD COLUMN relay_report BOOLEAN NOT NULL DEFAULT 0")
+                migrations.append(f"ALTER TABLE messages ADD COLUMN relay_report BOOLEAN NOT NULL DEFAULT {bool_default}")
         if "intercepted_messages" in table_names:
             columns = {col["name"] for col in inspect(db.engine).get_columns("intercepted_messages")}
             if "envelope_json" not in columns:
-                migrations.append("ALTER TABLE intercepted_messages ADD COLUMN envelope_json BLOB")
+                migrations.append(f"ALTER TABLE intercepted_messages ADD COLUMN envelope_json {binary_type}")
             if "recipient_protected" not in columns:
-                migrations.append("ALTER TABLE intercepted_messages ADD COLUMN recipient_protected BOOLEAN NOT NULL DEFAULT 0")
+                migrations.append(f"ALTER TABLE intercepted_messages ADD COLUMN recipient_protected BOOLEAN NOT NULL DEFAULT {bool_default}")
         if "security_findings" in table_names:
             columns = {col["name"] for col in inspect(db.engine).get_columns("security_findings")}
             if "remediation_steps_json" not in columns:
@@ -207,7 +220,11 @@ def create_app(overrides=None):
 
     @app.after_request
     def headers(resp):
-        resp.headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        resp.headers["Content-Security-Policy"] = (
+            "default-src 'self'; style-src 'self' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; frame-ancestors 'none'; "
+            "base-uri 'self'; form-action 'self'"
+        )
         resp.headers["X-Content-Type-Options"] = "nosniff"
         resp.headers["X-Frame-Options"] = "DENY"
         # Flask-WTF's HTTPS CSRF check requires a Referer on same-origin unsafe requests.

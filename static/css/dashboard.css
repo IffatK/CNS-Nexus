@@ -1,0 +1,53 @@
+.dashboard-page{--dash-ink:#F4F5FC;--dash-muted:#A7AEC8;--dash-bg:#171B32;--dash-panel:#202642;--dash-raised:#252C4C;--dash-line:#343B5E;--chart-text:#B2B9D2;--chart-grid:#343B5E;--chart-center:#F4F5FC}
+.dashboard-page .dashboard-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:18px 0 24px}
+.dashboard-page .dashboard-kpis .stat{position:relative;min-width:0;padding:19px 20px 18px;overflow:hidden;border:1px solid var(--dash-line);border-radius:12px;background:linear-gradient(145deg,#202642,#1A203A);box-shadow:0 9px 22px rgba(14,17,35,.09)}
+.dashboard-page .dashboard-kpis .stat::after{content:"";position:absolute;right:-20px;top:-24px;width:82px;height:82px;border:1px solid #8D91C433;border-radius:50%;box-shadow:0 0 0 12px #8D91C411}
+.dashboard-page .dashboard-kpis .stat b{position:relative;z-index:1;color:#F4F5FC;font:700 clamp(1.8rem,3vw,2.4rem)/1.1 "Bricolage Grotesque",Inter,"Segoe UI",sans-serif}
+.dashboard-page .dashboard-kpis .stat span{position:relative;z-index:1;margin-top:9px;color:#A7AEC8;font-size:12px;letter-spacing:.015em}
+.dashboard-page .hero{background:radial-gradient(ellipse at 85% 10%,#34395F 0%,transparent 42%),linear-gradient(115deg,#202642,#171C32);border-color:#343B5E;border-left-color:#B52A32;box-shadow:0 14px 32px rgba(14,17,35,.12)}
+.dashboard-page .hero h1{color:#F4F5FC}
+.dashboard-page .hero p{color:#A7AEC8}
+.dashboard-page .hero .btn.secondary{background:#252C4C;color:#F4F5FC;border-color:#41496D}
+.dashboard-page .hero .btn.secondary:hover{background:#30395D;border-color:#59658F}
+.dashboard-analytics{margin:24px 0;padding:24px;background:radial-gradient(ellipse at 15% 0%,#2C3152 0%,transparent 44%),linear-gradient(145deg,#171B32,#14182C);border:1px solid #303755;border-radius:18px;box-shadow:0 18px 45px rgba(17,20,39,.16);color:var(--dash-ink)}
+.dashboard-analytics .analytics-board-heading{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:0 2px 18px}
+.dashboard-analytics .analytics-board-heading .eyebrow{color:#E4A65D}
+.dashboard-analytics .analytics-board-heading h2{margin:0;color:#F4F5FC;font:700 clamp(1.55rem,2.5vw,2.1rem)/1.2 "Bricolage Grotesque",Inter,"Segoe UI",sans-serif}
+.dashboard-analytics .analytics-board-heading p{margin:6px 0 0;color:#A7AEC8;font-size:13px}
+.dashboard-analytics .analytics-live{display:inline-flex;align-items:center;gap:9px;padding:8px 11px;border:1px solid #354763;border-radius:999px;background:#1B263D;color:#B9D9C5;font:600 10px/1.2 "IBM Plex Mono",Consolas,monospace;letter-spacing:.1em;white-space:nowrap}
+.dashboard-analytics .analytics-live i{width:7px;height:7px;border-radius:50%;background:#75C99A;box-shadow:0 0 0 4px #75C99A22}
+.dashboard-analytics .chart-controls{margin:0 0 16px;padding:17px 18px;border:1px solid var(--dash-line);border-radius:12px;background:linear-gradient(145deg,#202642,#1B213B);box-shadow:none;color:var(--dash-ink)}
+.dashboard-analytics .chart-controls .eyebrow{margin-bottom:4px;color:#A6A8D3}
+.dashboard-analytics .chart-controls h2{margin:0 0 12px;color:#F4F5FC;font:600 17px/1.35 "Bricolage Grotesque",Inter,"Segoe UI",sans-serif}
+.dashboard-analytics .filters{display:grid;grid-template-columns:repeat(3,minmax(150px,1fr)) auto minmax(135px,auto);align-items:end;gap:10px;margin:0;padding:0;border:0;background:transparent}
+.dashboard-analytics .filters label{min-width:0;margin:0;color:#B9C0D8;font-size:11px}
+.dashboard-analytics .filters select,.dashboard-analytics .filters input{min-height:40px;margin-top:5px;border:1px solid #41496D;border-radius:7px;background:#171C32;color:#F4F5FC;font-size:12px}
+.dashboard-analytics .filters button{min-height:40px;padding:9px 14px;border-color:#C84A52;background:#B52A32;font-size:12px}
+.dashboard-analytics #chart-state{padding:0 3px 10px;color:#A7AEC8;font-size:11px;white-space:nowrap}
+.dashboard-analytics>.hint{margin:12px 2px 2px;color:#A7AEC8;font-size:11px}
+.dashboard-analytics .chart-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px;margin:0}
+.dashboard-analytics .chart-card{grid-column:span 4;min-width:0;overflow:hidden;margin:0;padding:16px;border:1px solid #343B5E;border-radius:12px;background:linear-gradient(155deg,#222945,#1C223D);box-shadow:0 8px 20px #0d10201f;color:#F4F5FC}
+.dashboard-analytics .chart-card[data-chart="chart-timeline"]{grid-column:span 8}
+.dashboard-analytics .chart-card[data-chart="chart-activity"]{grid-column:span 4}
+.dashboard-analytics .chart-card[data-chart="chart-integrity"],.dashboard-analytics .chart-card[data-chart="chart-attacker"],.dashboard-analytics .chart-card[data-chart="chart-logins"]{grid-column:span 4}
+.dashboard-analytics .chart-card-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.dashboard-analytics .chart-card .eyebrow{margin-bottom:5px;color:#9FA8CD;font:600 9px/1.3 "IBM Plex Mono",Consolas,monospace;letter-spacing:.11em}
+.dashboard-analytics .chart-card h3{margin:0;color:#F3F4FA;font:600 15px/1.35 "Bricolage Grotesque",Inter,"Segoe UI",sans-serif}
+.dashboard-analytics .chart-mark{display:grid;place-items:center;width:25px;height:25px;flex:0 0 25px;border:1px solid #41496D;border-radius:7px;background:#292F4D;color:#D8B17D;font:600 10px "IBM Plex Mono",Consolas,monospace}
+.dashboard-analytics .chart-card>.hint{min-height:0;margin:6px 0 10px;color:#A7AEC8;font-size:11px}
+.dashboard-analytics .chart-wrap{height:205px;padding:7px;border:1px solid #323A5B;border-radius:9px;background:#191E35}
+.dashboard-analytics .chart-wrap canvas{width:100%;height:189px}
+.dashboard-analytics .chart-legend{display:flex;align-items:center;flex-wrap:wrap;gap:7px 13px;margin:9px 1px 0;padding:0;list-style:none}
+.dashboard-analytics .chart-legend li{display:inline-flex;align-items:center;gap:6px;color:#B9C0D8;font-size:10px;line-height:1.3}
+.dashboard-analytics .chart-legend .legend-swatch{width:8px;height:8px;flex:0 0 8px;border-radius:50%;box-shadow:0 0 0 2px #ffffff14}
+.dashboard-analytics .chart-legend b{margin-left:2px;color:#F4F5FC;font:600 10px "IBM Plex Mono",Consolas,monospace}
+.dashboard-analytics .chart-summary{min-height:2.5em;margin:8px 1px;color:#D8DDF0;font-size:11px;line-height:1.5}
+.dashboard-analytics .chart-card details{padding-top:9px;border-top:1px solid #343B5E;color:#A7AEC8;font-size:11px}
+.dashboard-analytics .chart-card details summary{color:#D7B37D;font-weight:600}
+.dashboard-analytics .chart-card details ul{gap:5px 14px;margin:8px 0 0}
+.dashboard-analytics .chart-card details li{color:#B9C0D8;font-size:11px}
+.dashboard-analytics .chart-card>a{display:inline-block;margin-top:10px;color:#E4A65D;font-size:11px;font-weight:650}
+.dashboard-analytics .chart-card>a:hover{color:#F4C17D}
+@media(max-width:1100px){.dashboard-analytics .filters{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-analytics #chart-state{white-space:normal}.dashboard-analytics .chart-card[data-chart="chart-timeline"]{grid-column:span 7}.dashboard-analytics .chart-card[data-chart="chart-activity"]{grid-column:span 5}}
+@media(max-width:760px){.dashboard-page .dashboard-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-analytics{padding:17px}.dashboard-analytics .chart-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-analytics .chart-card,.dashboard-analytics .chart-card[data-chart]{grid-column:span 1}.dashboard-analytics .chart-card[data-chart="chart-timeline"]{grid-column:span 2}}
+@media(max-width:520px){.dashboard-analytics{padding:13px;border-radius:13px}.dashboard-analytics .analytics-board-heading{align-items:flex-start;flex-direction:column}.dashboard-analytics .filters{grid-template-columns:minmax(0,1fr)}.dashboard-analytics .filters button{width:100%}.dashboard-analytics .chart-grid{grid-template-columns:minmax(0,1fr)}.dashboard-analytics .chart-card[data-chart]{grid-column:1}.dashboard-analytics .chart-wrap{height:190px}.dashboard-analytics .chart-wrap canvas{height:174px}}

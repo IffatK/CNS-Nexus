@@ -74,10 +74,17 @@ def health():
 
 def system_status():
     h = health()
-    uri = current_app.config["SQLALCHEMY_DATABASE_URI"]
-    dbfile = Path(uri.replace("sqlite:///", "", 1))
+    if db.engine.dialect.name == "sqlite":
+        uri = current_app.config["SQLALCHEMY_DATABASE_URI"]
+        dbfile = Path(uri.replace("sqlite:///", "", 1))
+        db_path = str(dbfile)
+        db_bytes = dbfile.stat().st_size if dbfile.exists() else 0
+    else:
+        # Never return a remote connection URL: it may contain credentials.
+        db_path = "PostgreSQL (remote)"
+        db_bytes = 0
     counts = {"users": User.query.count(), "messages": Message.query.count(),
               "security_events": SecurityEvent.query.count(), "login_attempts": LoginAttempt.query.count()}
     return {"health": h, "counts": counts, "key_status": current_app.extensions["cns_keys"].status(),
-            "db_path": str(dbfile), "db_bytes": dbfile.stat().st_size if dbfile.exists() else 0,
+            "db_path": db_path, "db_bytes": db_bytes,
             "python": sys.version.split()[0], "flask": flask.__version__}

@@ -69,6 +69,8 @@
       if (data.intercepted) {
         announce("QUEUED · relay item #" + data.id + ". The recipient has not received this message yet; an authorized lab operator must forward it.", "queued");
         body.value = "";
+        recipient.value = "";
+        document.getElementById("body-count").textContent = "0";
         button.disabled = false;
         button.textContent = sendLabel; button.removeAttribute("aria-busy");
         return;
@@ -78,6 +80,9 @@
       } else {
         announce("DELIVERED · Message accepted. Opening message…", "delivered");
       }
+      body.value = "";
+      recipient.value = "";
+      document.getElementById("body-count").textContent = "0";
       window.setTimeout(() => window.location.assign("/messages/" + data.id), protection ? 2200 : 900);
     } catch (err) {
       const message = err.message || "Message send failed.";

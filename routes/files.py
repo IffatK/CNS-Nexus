@@ -15,6 +15,7 @@ from models import FileShare, MalwareScan, SharedFile, User
 from models.base import utcnow
 from services.scanner import file_type_matches, scan_path, scanner_status
 from services.security_log import log_event
+from services.roles import client_users
 
 bp = Blueprint("files", __name__)
 ALLOWED_EXTENSIONS = {".txt", ".csv", ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".docx", ".xlsx", ".pptx", ".docm", ".xlsm", ".pptm", ".zip", ".7z"}
@@ -28,8 +29,13 @@ def _storage_root():
 
 def _accessible_shares():
     now = utcnow()
-    return FileShare.query.filter_by(recipient_id=current_user.id, revoked_at=None).filter(
+    query = FileShare.query.filter_by(recipient_id=current_user.id, revoked_at=None).filter(
         (FileShare.expires_at.is_(None)) | (FileShare.expires_at > now))
+    if not current_user.is_admin:
+        query = query.join(SharedFile, FileShare.file_id == SharedFile.id).join(
+        User, SharedFile.owner_id == User.id)
+        query = client_users(query)
+    return query
 
 
 @bp.get("/files")
@@ -39,7 +45,11 @@ def page():
     shared = _accessible_shares().order_by(FileShare.id.desc()).limit(100).all()
     binary = current_app.config["CLAMSCAN_PATH"]
     engine_available = scanner_status(binary)["available"]
-    return render_template("files.html", owned=owned, shared=shared, engine_available=engine_available,
+    users_query = User.query.filter(User.id != current_user.id)
+    if not current_user.is_admin:
+        users_query = client_users(users_query)
+    users = users_query.order_by(User.username.asc()).all()
+    return render_template("files.html", owned=owned, shared=shared, users=users, engine_available=engine_available,
                            max_mb=current_app.config["MAX_SCAN_BYTES"] // (1024 * 1024))
 
 
@@ -112,16 +122,25 @@ def upload():
 @login_required
 def share(file_id):
     record = SharedFile.query.filter_by(id=file_id, owner_id=current_user.id).first_or_404()
-    recipient_name = (request.form.get("recipient") or "").strip().lower()
-    recipient = User.query.filter_by(username=recipient_name).first()
-    if recipient is None or recipient.id == current_user.id:
-        flash("Choose another registered user as the recipient.", "warning")
+    recipient_names = request.form.getlist("recipients") or [request.form.get("recipient", "")]
+    recipient_names = list(dict.fromkeys(name.strip().lower() for name in recipient_names if name.strip()))
+    if not recipient_names or len(recipient_names) > 50:
+        flash("Select between 1 and 50 registered recipients.", "warning")
+        return redirect(url_for("files.page"))
+    recipient_query = User.query.filter(User.username.in_(recipient_names), User.id != current_user.id)
+    if not current_user.is_admin:
+        recipient_query = client_users(recipient_query)
+    recipients = recipient_query.all()
+    if len(recipients) != len(recipient_names):
+        flash("One or more selected recipients are invalid. Choose registered users only.", "warning")
         return redirect(url_for("files.page"))
     if record.scan_status != "clean":
         abort(409)
-    exists = FileShare.query.filter_by(file_id=record.id, recipient_id=recipient.id, revoked_at=None).first()
-    if exists:
-        flash("This file already has an active share for that user.", "warning")
+    already_shared = {share.recipient_id for share in FileShare.query.filter_by(
+        file_id=record.id, revoked_at=None).all()}
+    new_recipients = [recipient for recipient in recipients if recipient.id not in already_shared]
+    if not new_recipients:
+        flash("This file is already actively shared with all selected users.", "warning")
         return redirect(url_for("files.page"))
     days = request.form.get("expires_days", "")
     try:
@@ -131,12 +150,13 @@ def share(file_id):
     except ValueError:
         flash("Expiry must be between 1 and 365 days.", "warning")
         return redirect(url_for("files.page"))
-    row = FileShare(file_id=record.id, recipient_id=recipient.id, expires_at=expiry)
-    db.session.add(row)
+    for recipient in new_recipients:
+        db.session.add(FileShare(file_id=record.id, recipient_id=recipient.id, expires_at=expiry))
     db.session.commit()
     log_event("file_shared", "info", user=current_user,
-              detail=f"file_id={record.id} recipient_id={recipient.id} share_id={row.id}")
-    flash(f"Shared {record.filename} with {recipient.username}.", "ok")
+              detail=f"file_id={record.id} recipient_count={len(new_recipients)} recipient_ids={','.join(str(u.id) for u in new_recipients)}")
+    names = ", ".join(recipient.username for recipient in new_recipients)
+    flash(f"Shared {record.filename} with {names}.", "ok")
     return redirect(url_for("files.page"))
 
 
@@ -159,7 +179,7 @@ def revoke(share_id):
 def download(file_id):
     record = SharedFile.query.filter_by(id=file_id).first_or_404()
     is_owner = record.owner_id == current_user.id
-    share_row = None if is_owner else _accessible_shares().filter_by(file_id=record.id).first()
+    share_row = None if is_owner else _accessible_shares().filter(FileShare.file_id == record.id).first()
     if not is_owner and share_row is None:
         abort(404)
     path = (_storage_root() / record.storage_key).resolve()

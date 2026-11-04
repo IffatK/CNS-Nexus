@@ -1,4 +1,21 @@
 (() => {
+  const sectionLinks = [...document.querySelectorAll('.scanner-nav a[href^="#"]')];
+  const sections = sectionLinks.map(link => ({link, section: document.querySelector(link.getAttribute("href"))})).filter(item => item.section);
+  const markSection = section => sectionLinks.forEach(link => {
+    const active = link.getAttribute("href") === `#${section?.id}`;
+    link.classList.toggle("active", active);
+    if (active) link.setAttribute("aria-current", "location");
+    else link.removeAttribute("aria-current");
+  });
+  sectionLinks.forEach(link => link.addEventListener("click", () => markSection(document.querySelector(link.getAttribute("href")))));
+  markSection(sections.find(item => item.section.id === location.hash.slice(1))?.section || sections[0]?.section);
+  if ("IntersectionObserver" in window) {
+    const sectionObserver = new IntersectionObserver(entries => {
+      const current = entries.filter(entry => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+      if (current) markSection(current.target);
+    }, {rootMargin: "-18% 0px -70% 0px", threshold: [0, .15, .35]});
+    sections.forEach(({section}) => sectionObserver.observe(section));
+  }
   const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
   async function csrf() {
     const response = await fetch("/api/csrf", {credentials: "same-origin", cache: "no-store"});

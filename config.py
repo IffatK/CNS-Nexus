@@ -35,6 +35,16 @@ def _configured_path(name, default=None):
     return str(path.resolve())
 
 
+def _database_url():
+    """Read a provider URL and select the supported PostgreSQL driver."""
+    value = os.environ.get("DATABASE_URL", "").strip()
+    if value.startswith("postgres://"):
+        value = "postgresql://" + value[len("postgres://"):]
+    if value.startswith("postgresql://"):
+        value = "postgresql+psycopg://" + value[len("postgresql://"):]
+    return value or None
+
+
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY")
     # Relative paths in .env are anchored to this application, not the shell's
@@ -42,12 +52,15 @@ class Config:
     # or select a second, empty instance/database.
     INSTANCE_DIR = _configured_path("CNS_INSTANCE_DIR", BASE_DIR / "instance")
     # SQLALCHEMY_DATABASE_URI and KEY_DIR are derived from INSTANCE_DIR in create_app()
+    SQLALCHEMY_DATABASE_URI = _database_url()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_SECURE = _bool("SESSION_COOKIE_SECURE")
     REQUIRE_HTTPS = _bool("REQUIRE_HTTPS")
+    # Enable only when the app binds to loopback behind a trusted TLS proxy.
+    TRUST_PROXY = _bool("TRUST_PROXY")
     TLS_CERT_FILE = _configured_path("TLS_CERT_FILE")
     TLS_KEY_FILE = _configured_path("TLS_KEY_FILE")
     PERMANENT_SESSION_LIFETIME = timedelta(minutes=30)
@@ -67,6 +80,9 @@ class Config:
     MAX_MESSAGE_CHARS = 2000
     MAX_SCAN_BYTES = int(os.environ.get("MAX_SCAN_BYTES", str(10 * 1024 * 1024)))
     CLAMSCAN_PATH = os.environ.get("CLAMSCAN_PATH", "clamscan")
+    # If clamav-daemon is installed and running, clamdscan reuses its loaded
+    # signature database instead of loading signatures for every upload.
+    CLAMDSCAN_PATH = os.environ.get("CLAMDSCAN_PATH", "clamdscan")
     # A cold clamscan process loads the signature database for each request;
     # allow slower VirtualBox/shared-folder hosts enough time without unbounded scans.
     CLAMSCAN_TIMEOUT = int(os.environ.get("CLAMSCAN_TIMEOUT", "120"))

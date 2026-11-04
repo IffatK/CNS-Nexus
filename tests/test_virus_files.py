@@ -15,6 +15,8 @@ def test_missing_clamav_is_scan_failed_never_clean(app):
     client = new_user(app, "alice")
     assert b"ClamAV" in client.get("/virus-scanner").data
     assert b"Timeout" in client.get("/files").data
+    assert b"upload-progress.js" in client.get("/files").data
+    assert b"spinner" in client.get("/virus-scanner").data
     result = client.post("/virus-scanner/scan", data={
         "file": (io.BytesIO(b"safe text sample"), "sample.txt")
     }, content_type="multipart/form-data")
@@ -86,4 +88,38 @@ def test_file_share_is_authorized_scanned_and_hash_checked(app, monkeypatch):
     assert recipient.get(f"/files/{file_id}/download").status_code == 409
     with app.app_context():
         assert FileShare.query.count() == 1
+
+
+def test_file_share_multiselect_accepts_only_registered_users(app, monkeypatch):
+    import routes.files as files_route
+    monkeypatch.setattr(files_route, "scan_path", clean_scan)
+    owner, alice, bob = new_user(app, "owner"), new_user(app, "alice"), new_user(app, "bob")
+    uploaded = owner.post("/files/upload", data={"file": (io.BytesIO(b"team document"), "team.txt")},
+                          content_type="multipart/form-data")
+    assert uploaded.status_code == 302
+    with app.app_context():
+        file_id = SharedFile.query.one().id
+    assert b"user-multi-select" in owner.get("/files").data
+    response = owner.post(f"/files/{file_id}/share", data={"recipients": ["alice", "bob"], "expires_days": "30"})
+    assert response.status_code == 302
+    assert alice.get(f"/files/{file_id}/download").data == b"team document"
+    assert bob.get(f"/files/{file_id}/download").data == b"team document"
+    with app.app_context():
+        assert FileShare.query.filter_by(file_id=file_id).count() == 2
+
+
+def test_client_cannot_share_file_with_admin(app, monkeypatch):
+    import routes.files as files_route
+    monkeypatch.setattr(files_route, "scan_path", clean_scan)
+    owner = new_user(app, "owner")
+    new_user(app, "admin")
+    uploaded = owner.post("/files/upload", data={"file": (io.BytesIO(b"client file"), "client.txt")},
+                          content_type="multipart/form-data")
+    assert uploaded.status_code == 302
+    with app.app_context():
+        file_id = SharedFile.query.one().id
+    response = owner.post(f"/files/{file_id}/share", data={"recipients": ["admin"]})
+    assert response.status_code == 302
+    with app.app_context():
+        assert FileShare.query.filter_by(file_id=file_id).count() == 0
 

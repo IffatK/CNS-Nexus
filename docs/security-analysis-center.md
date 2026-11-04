@@ -10,6 +10,8 @@ sudo freshclam
 sudo systemctl enable --now clamav-freshclam
 ```
 
+For faster repeat uploads, install and run the persistent scanner daemon: `sudo apt install clamav-daemon && sudo systemctl enable --now clamav-daemon`. When `clamdscan` is present and reachable, uploads use its already-loaded signatures; if it is unavailable or errors, the application falls back to `clamscan`. Set `CLAMDSCAN_PATH=` in `.env` to disable daemon attempts.
+
 If `clamav-freshclam` is already updating signatures, do not start a second updater. The app marks a scan incomplete if ClamAV is missing, unavailable, times out, or cannot finish; it never converts those outcomes to clean.
 
 The following settings are optional:

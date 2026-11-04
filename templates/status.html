@@ -2,13 +2,13 @@
 {% block title %}System status{% endblock %}
 {% block content %}
 <section class="card"><h1>System status</h1>
-<table><tbody>
+<div class="table-scroll" role="region" aria-label="System status details" tabindex="0"><table class="compact-table"><tbody>
 <tr><th>Overall</th><td id="st-overall">{{ s.health.status }}</td></tr>
 <tr><th>Database</th><td>{{ s.health.database }} ({{ s.db_path }}, {{ s.db_bytes }} bytes)</td></tr>
 <tr><th>Keys</th><td>{{ s.health.keys }} - master present: {{ s.key_status.master_present }}, permissions ok: {{ s.key_status.permissions_ok }}, user keys: {{ s.key_status.user_keys }}</td></tr>
 <tr><th>Users</th><td>{{ s.counts.users }}</td></tr><tr><th>Messages</th><td>{{ s.counts.messages }}</td></tr>
 <tr><th>Security events</th><td>{{ s.counts.security_events }}</td></tr><tr><th>Login attempts</th><td>{{ s.counts.login_attempts }}</td></tr>
 <tr><th>Runtime</th><td>Python {{ s.python }}, Flask {{ s.flask }}, app {{ s.health.version }}</td></tr>
-</tbody></table>
+</tbody></table></div>
 <button class="btn secondary" id="recheck">Re-check /api/health</button> <pre id="health-out" class="body" hidden></pre></section>
 {% endblock %}

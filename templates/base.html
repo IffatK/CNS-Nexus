@@ -6,10 +6,12 @@
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <title>{% block title %}CNS Secure Lab{% endblock %}</title>
 <script src="{{ url_for('static', filename='js/theme.js', v=asset_version('js/theme.js')) }}"></script>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v=asset_version('css/style.css')) }}">
 {% block styles %}{% endblock %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/responsive.css', v=asset_version('css/responsive.css')) }}">
 </head>
-<body data-page="{{ 'auth' if request.endpoint in ('auth.login', 'auth.register') else 'client' }}">
+<body data-page="{{ 'security-center' if request.endpoint and request.endpoint.startswith('security_center.') else 'auth' if request.endpoint in ('auth.login', 'auth.register') else 'client' }}">
 <header class="nav">
   <a class="brand" href="{{ url_for('index') }}"><span class="brand-mark" aria-hidden="true">C</span><span>CNS Secure Lab</span></a>
   <button class="theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="Switch theme">◐ Theme</button>
@@ -19,18 +21,21 @@
     <a href="{{ url_for('messaging.compose') }}">Compose</a>
     <a href="{{ url_for('messaging.inbox') }}">Inbox</a>
     <a href="{{ url_for('messaging.sent') }}">Sent</a>
-    <details class="nav-more"><summary>Security tools</summary><div class="nav-menu">
+    <div class="nav-more">
+      <button class="nav-tools-toggle" type="button" aria-expanded="false" aria-controls="security-tools-menu">Security tools</button>
+      <div class="nav-menu" id="security-tools-menu" hidden>
       <a href="{{ url_for('dashboard.events') }}">Security events</a>
       <a href="{{ url_for('dashboard.notifications') }}">Notifications{% if unread_notifications %} ({{ unread_notifications }}){% endif %}</a>
       <a href="{{ url_for('settings.page') }}">Protection settings</a>
-      <a href="{{ url_for('lab.lab_page') }}">Cryptography lab</a>
+      <a href="{{ url_for('lab.lab_page') }}">Crypto demo</a>
       <a href="{{ url_for('dashboard.status') }}">System status</a>
       {% if current_user.is_admin %}<a href="{{ url_for('attacker.page') }}">Attacker console</a>{% endif %}
       <a href="{{ url_for('virus_scanner.page') }}">Virus detection</a>
       <a href="{{ url_for('security_center.page') }}">Security analysis center</a>
       <a href="{{ url_for('files.page') }}">File sharing</a>
       <a href="{{ url_for('account.page') }}">Account security</a>
-    </div></details>
+      </div>
+    </div>
   </nav>
   <form class="inline" method="post" action="{{ url_for('auth.logout') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

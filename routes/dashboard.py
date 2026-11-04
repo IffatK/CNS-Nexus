@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from flask import Blueprint, current_app, jsonify, make_response, redirect, render_template, request
 from flask_login import current_user, login_required
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 
 from models import InterceptedMessage, LoginAttempt, MalwareScan, Message, SecurityEvent, SecurityNotification, User, UserSession
 from extensions import db
@@ -12,6 +12,7 @@ from models.base import utcnow
 from services import messaging
 from services.health import health, system_status
 from services.scanner import scanner_status
+from services.roles import client_user_condition, client_users
 
 bp = Blueprint("dashboard", __name__)
 
@@ -54,12 +55,17 @@ def apply_event_filters(query, args):
 def dashboard_data(user, period_days=30):
     visible_messages = _scoped_message_query(user).all()
     statuses = [messaging.verify_signature_status(m) for m in visible_messages]
-    recent = Message.query.filter((Message.sender_id == user.id) | (Message.recipient_id == user.id)) \
-        .order_by(Message.id.desc()).limit(5).all()
+    recent = _scoped_message_query(user).filter(
+        or_(Message.sender_id == user.id, Message.recipient_id == user.id)
+    ).order_by(Message.id.desc()).limit(5).all()
     relay_query = InterceptedMessage.query
     if not user.is_admin:
-        relay_query = relay_query.filter(or_(InterceptedMessage.sender_username == user.username,
-                                             InterceptedMessage.recipient_username == user.username))
+        client_usernames = client_users(db.session.query(User.username))
+        relay_query = relay_query.filter(or_(
+            and_(InterceptedMessage.sender_username == user.username,
+                 InterceptedMessage.recipient_username.in_(client_usernames)),
+            and_(InterceptedMessage.recipient_username == user.username,
+                 InterceptedMessage.sender_username.in_(client_usernames))))
     relay_counts = {status: relay_query.filter_by(status=status).count()
                     for status in ("pending", "forwarded", "tampered", "dropped")}
     scan_query = MalwareScan.query if user.is_admin else MalwareScan.query.filter_by(user_id=user.id)
@@ -72,11 +78,11 @@ def dashboard_data(user, period_days=30):
     if not user.is_admin:
         active_sessions = active_sessions.filter_by(user_id=user.id)
     return {
-        "users": User.query.count(),
+        "users": client_users().count(),
         "total_messages": len(visible_messages),
         "delivered": len(visible_messages),  # message rows exist only after delivery
-        "inbox": Message.query.filter_by(recipient_id=user.id).count(),
-        "sent": Message.query.filter_by(sender_id=user.id).count(),
+        "inbox": _scoped_message_query(user).filter_by(recipient_id=user.id).count(),
+        "sent": _scoped_message_query(user).filter_by(sender_id=user.id).count(),
         "verified": statuses.count("verified"),
         "unprotected": statuses.count("unprotected"),
         "failed": sum(s not in ("verified", "unprotected") for s in statuses),
@@ -108,7 +114,9 @@ def dashboard():
 def _scoped_message_query(user):
     query = Message.query
     if not user.is_admin:
-        query = query.filter(or_(Message.sender_id == user.id, Message.recipient_id == user.id))
+        query = query.filter(or_(
+            and_(Message.sender_id == user.id, Message.recipient.has(client_user_condition())),
+            and_(Message.recipient_id == user.id, Message.sender.has(client_user_condition()))))
     return query
 
 
@@ -176,8 +184,12 @@ def dashboard_metrics(user, args):
 
     relay_q = InterceptedMessage.query
     if not user.is_admin:
-        relay_q = relay_q.filter(or_(InterceptedMessage.sender_username == user.username,
-                                     InterceptedMessage.recipient_username == user.username))
+        client_usernames = client_users(db.session.query(User.username))
+        relay_q = relay_q.filter(or_(
+            and_(InterceptedMessage.sender_username == user.username,
+                 InterceptedMessage.recipient_username.in_(client_usernames)),
+            and_(InterceptedMessage.recipient_username == user.username,
+                 InterceptedMessage.sender_username.in_(client_usernames))))
     relay_q = relay_q.filter(InterceptedMessage.created_at >= start, InterceptedMessage.created_at <= end)
     attacker = {"intercepted": relay_q.count(), "unchanged_forwarded": relay_q.filter_by(status="forwarded").count(),
                 "modified_forwarded": relay_q.filter_by(status="tampered").count(),

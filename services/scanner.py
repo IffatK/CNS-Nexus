@@ -1,5 +1,6 @@
 """Safe, local ClamAV adapter. Uploaded bytes are never executed or persisted here."""
 import hashlib
+import os
 import shutil
 import subprocess
 import threading
@@ -67,12 +68,47 @@ def scanner_status(binary="clamscan"):
         return {"available": False, "engine": "unavailable", "definitions": "unavailable"}
 
 
+def _scan_with_daemon(path, binary, timeout, filename):
+    """Use the persistent ClamAV daemon when configured and reachable; else fall back."""
+    daemon = os.environ.get("CLAMDSCAN_PATH", "clamdscan").strip()
+    if not daemon or not (shutil.which(daemon) or Path(daemon).is_file()):
+        return None
+    try:
+        result = subprocess.run([daemon, "--fdpass", "--no-summary", str(path)],
+                                capture_output=True, text=True,
+                                timeout=min(max(1, timeout), 3), check=False, shell=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    output = (result.stdout + "\n" + result.stderr).strip()
+    if result.returncode == 1 and "FOUND" in output:
+        detection = next((line.rsplit(": ", 1)[-1].removesuffix(" FOUND")
+                          for line in output.splitlines() if " FOUND" in line), "Detection reported")
+        status, error, detection = "infected", "", detection[:255]
+    elif result.returncode == 0 and (" OK" in output or output.endswith("OK")):
+        status, error, detection = "clean", "", ""
+    else:
+        # An unreachable daemon, inaccessible file, or other daemon error must
+        # fall through to the standalone scanner instead of claiming a result.
+        return None
+    info = scanner_status(binary)
+    engine = info["engine"] if info["available"] else "ClamAV daemon"
+    definitions = info["definitions"] if info["available"] else "daemon signatures"
+    if status == "clean" and Path(filename or path).suffix.lower() in {".docm", ".xlsm", ".pptm"}:
+        status, error, detection = "suspicious", "Macro-enabled Office document requires manual review.", "Macro-enabled Office format"
+    return {"status": status, "error": error, "engine": engine, "definitions": definitions,
+            "detection": detection, "duration_ms": 0}
+
+
 def scan_path(path, binary="clamscan", timeout=120, filename=None):
     """Return CLEAN/INFECTED/SUSPICIOUS/FAILED with no clean fallback on errors."""
     if not _slots.acquire(blocking=False):
         return {"status": "failed", "error": "Scanner is busy; retry shortly.", "engine": "unknown", "definitions": "unknown", "detection": "", "duration_ms": 0}
     started = time.monotonic()
     try:
+        daemon_result = _scan_with_daemon(path, binary, timeout, filename)
+        if daemon_result is not None:
+            daemon_result["duration_ms"] = int((time.monotonic() - started) * 1000)
+            return daemon_result
         version = subprocess.run([binary, "--version"], capture_output=True, text=True,
                                  timeout=min(timeout, 10), check=False, shell=False)
         if version.returncode != 0:
