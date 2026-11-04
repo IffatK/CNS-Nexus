@@ -269,7 +269,17 @@ def diagnostic_components():
         key_detail = (f"Key loading and {key_status['user_keys_checked']} database signing-key pair(s) were checked, "
                       "but Windows ACL permissions were not reviewed. Stored messages were not decrypted.")
     else:
-        key_detail = "Key loading, file permissions, or database signing-key pairing failed. Stored messages were not decrypted."
+        failures = []
+        if not key_status["master_present"]:
+            failures.append("master key is missing")
+        if key_status["permissions_ok"] is False:
+            failures.append("key file permissions are too broad or key files cannot be inspected")
+        if not key_status["key_pairings_ok"]:
+            failures.append(
+                f"signing-key check failed ({key_status['user_keys_checked']} of "
+                f"{key_status['user_key_count']} stored account key(s) checked)"
+            )
+        key_detail = ("; ".join(failures) or "key checks failed") + ". Stored messages were not decrypted."
     checks.append({"name": "Cryptographic keys", "status": key_status["state"], "detail": key_detail})
     try:
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -290,10 +300,16 @@ def diagnostic_components():
             context.load_cert_chain(current_app.config["TLS_CERT_FILE"], current_app.config["TLS_KEY_FILE"])
         except (OSError, ssl.SSLError):
             tls_files = False
-    tls_status = "HEALTHY" if tls_files else ("UNAVAILABLE" if https_required else "NOT CONFIGURED")
-    tls_detail = (f"A valid TLS certificate is configured; this request used {request.scheme.upper()} at {request.host}."
-                  if tls_files else "HTTPS is required but certificate files are unavailable." if https_required
-                  else f"No TLS listener is configured; this request used {request.scheme.upper()} at {request.host}.")
+    proxy_https = bool(current_app.config.get("TRUST_PROXY") and request.is_secure)
+    tls_status = "HEALTHY" if tls_files or proxy_https else ("UNAVAILABLE" if https_required else "NOT CONFIGURED")
+    tls_detail = (
+        f"A valid TLS certificate is configured; this request used {request.scheme.upper()} at {request.host}."
+        if tls_files else
+        f"HTTPS is terminated by the configured trusted proxy; the forwarded request used {request.scheme.upper()} at {request.host}."
+        if proxy_https else
+        "HTTPS is required but certificate files are unavailable." if https_required else
+        f"No TLS listener or trusted HTTPS proxy is configured; this request used {request.scheme.upper()} at {request.host}."
+    )
     checks.append({"name": "HTTPS and certificates", "status": tls_status, "detail": tls_detail})
     secure_cookie = bool(current_app.config.get("SESSION_COOKIE_SECURE"))
     cookie_mismatch = secure_cookie and not request.is_secure
