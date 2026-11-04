@@ -18,6 +18,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--key-dir", default=str(ROOT / "instance" / "keys"),
                         help="directory containing the original aes_master.key and users/*.wrapped")
+    parser.add_argument("--user-id", type=int,
+                        help="validate and migrate only this database user (for partial key recovery)")
     parser.add_argument("--apply", action="store_true", help="write validated keys to the configured database")
     args = parser.parse_args()
     key_dir = Path(args.key_dir).expanduser().resolve()
@@ -53,6 +55,10 @@ def main():
         if db.engine.dialect.name != "postgresql":
             parser.error("DATABASE_URL must point to the Supabase PostgreSQL database before migrating keys")
         users = {int(user.id): user for user in User.query.order_by(User.id).all()}
+        if args.user_id is not None:
+            if args.user_id not in users:
+                parser.error(f"database user id {args.user_id} does not exist")
+            users = {args.user_id: users[args.user_id]}
         existing = {int(row.user_id): row for row in UserSigningKey.query.all()}
         files = {}
         if source_keys.is_dir():
@@ -125,7 +131,9 @@ def main():
                   f"{'migrated' if transport_blob is not None else 'already present or not needed'}.")
         else:
             db.session.rollback()
-            print(f"[OK] validation passed for {len(users)} account(s); {len(pending)} signing key(s) ready to migrate. "
+            scope = (f"user id {args.user_id}" if args.user_id is not None
+                     else f"{len(users)} account(s)")
+            print(f"[OK] validation passed for {scope}; {len(pending)} signing key(s) ready to migrate. "
                   "No keys were written. Re-run with --apply to persist them.")
 
 
