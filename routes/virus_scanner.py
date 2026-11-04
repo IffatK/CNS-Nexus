@@ -83,7 +83,7 @@ def scan_upload():
             flash("Multi-engine scanning is not configured. Add VIRUSTOTAL_API_KEY in the deployment environment.", "warning")
             return redirect(url_for("virus_scanner.page"))
         active = SecurityScan.query.filter_by(user_id=current_user.id).filter(
-            SecurityScan.status.in__(("queued", "running"))).count()
+            SecurityScan.status.in_(("queued", "running"))).count()
         if active >= 2:
             flash("You already have two scans queued or running. Please wait for one to finish.", "warning")
             return redirect(url_for("virus_scanner.page"))
