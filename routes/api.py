@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from flask_login import current_user, login_required
 from flask_wtf.csrf import generate_csrf
 
@@ -137,8 +137,12 @@ def lab_send_plain():
         envelope = messaging.prepare_intercepted_envelope(current_user, target.username, body)
     except MessagingError as e:
         return jsonify(error=e.message), e.status
-    except KeyManagerError:
+    except KeyManagerError as exc:
         db.session.rollback()
+        # The exception text distinguishes a missing DB row from a wrong
+        # Render CNS_MASTER_KEY, without logging any secret or message body.
+        current_app.logger.error("Signing key unavailable for user id %s: %s",
+                                 current_user.id, exc)
         log_event("signing_key_unavailable", "critical", user=current_user,
                   detail="Plaintext relay could not load the sender signing key; no message was queued")
         return jsonify(error=("This account's signing key is unavailable on the server. Restore the original "

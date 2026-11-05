@@ -537,6 +537,11 @@ def _virustotal_file_scan(path, filename, digest, cancel_check, update):
     except ScanCancelled:
         raise
     except urllib.error.HTTPError as exc:
+        if not analysis_id and exc.code == 409:
+            # VirusTotal reports HTTP 409 when this file resource already
+            # exists. Reuse its multi-engine report by SHA-256 instead of
+            # treating a duplicate submission as a provider outage.
+            return _virustotal_existing_file_report(key, digest, started)
         if analysis_id:
             return {"provider": "VirusTotal", "status": "pending", "analysis_id": analysis_id,
                 "report_url": f"https://www.virustotal.com/gui/file/{digest}", "detail": f"Analysis submitted; status lookup returned HTTP {exc.code}.",
@@ -550,6 +555,62 @@ def _virustotal_file_scan(path, filename, digest, cancel_check, update):
                 "malicious": 0, "suspicious": 0, "undetected": 0, "engine_count": 0,
                 "engine_names": [], "duration_ms": int((time.monotonic()-started)*1000)}
         return {"status": "unavailable", "detail": f"VirusTotal scan failed ({type(exc).__name__})."}
+
+
+def _virustotal_existing_file_report(key, digest, started):
+    """Read an existing VT file report after upload returns AlreadyExists (409)."""
+    if not re.fullmatch(r"[a-fA-F0-9]{64}", str(digest or "")):
+        return {"provider": "VirusTotal", "status": "unavailable",
+                "detail": "VirusTotal recognized an existing file, but its SHA-256 was unavailable for report lookup."}
+    req = urllib.request.Request(
+        f"https://www.virustotal.com/api/v3/files/{digest.lower()}",
+        headers={"x-apikey": key, "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=12) as response:
+            payload = json.loads(response.read(512 * 1024) or b"{}")
+        attrs = payload.get("data", {}).get("attributes", {})
+        stats = attrs.get("last_analysis_stats", {})
+        results = attrs.get("last_analysis_results", {})
+        if not stats and results:
+            categories = [item.get("category") for item in results.values() if isinstance(item, dict)]
+            stats = {name: categories.count(name) for name in ("malicious", "suspicious", "undetected", "harmless")}
+        malicious = int(stats.get("malicious", 0) or 0)
+        suspicious = int(stats.get("suspicious", 0) or 0)
+        undetected = int(stats.get("undetected", 0) or 0)
+        harmless = int(stats.get("harmless", 0) or 0)
+        # Only completed verdict categories count as an actual scan. A report
+        # with only timeouts/failures must never flow into the CLEAN result.
+        engine_count = malicious + suspicious + undetected + harmless
+        if engine_count <= 0:
+            return {"provider": "VirusTotal", "status": "pending",
+                    "report_url": f"https://www.virustotal.com/gui/file/{digest.lower()}",
+                    "detail": "VirusTotal already has this file, but no completed engine report is available yet.",
+                    "malicious": 0, "suspicious": 0, "undetected": 0, "engine_count": 0,
+                    "engine_names": [], "duration_ms": int((time.monotonic() - started) * 1000)}
+        hits = [str(item.get("engine_name") or name) for name, item in results.items()
+                if isinstance(item, dict) and item.get("category") in ("malicious", "suspicious")]
+        return {"provider": "VirusTotal", "status": "completed",
+                "report_url": f"https://www.virustotal.com/gui/file/{digest.lower()}",
+                "malicious": malicious, "suspicious": suspicious, "undetected": undetected,
+                "engine_count": engine_count, "engine_names": hits[:5],
+                "duration_ms": int((time.monotonic() - started) * 1000)}
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            detail = "VirusTotal rejected the duplicate upload, but no accessible report exists for its SHA-256."
+        elif exc.code == 401:
+            detail = "VirusTotal API key was rejected while retrieving the existing file report."
+        elif exc.code == 403:
+            detail = "VirusTotal account is not permitted to retrieve this file report."
+        elif exc.code == 429:
+            detail = "VirusTotal API quota or request rate limit was reached while retrieving the existing report."
+        else:
+            detail = f"VirusTotal existing-report lookup returned HTTP {exc.code}."
+        return {"provider": "VirusTotal", "status": "unavailable", "detail": detail,
+                "duration_ms": int((time.monotonic() - started) * 1000)}
+    except Exception as exc:
+        return {"provider": "VirusTotal", "status": "unavailable",
+                "detail": f"VirusTotal existing-report lookup failed ({type(exc).__name__}).",
+                "duration_ms": int((time.monotonic() - started) * 1000)}
 def _file_hash_reputation(digest, consent):
     key = os.environ.get("VIRUSTOTAL_API_KEY", "").strip()
     if not key:
