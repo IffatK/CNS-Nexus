@@ -156,7 +156,7 @@ def safe_fetch(url: str, *, cancel_check=None, max_redirects=MAX_REDIRECTS, max_
         if host in _blocked_hosts(blocked_hosts):
             raise UnsafeTarget("The scanner's own host is blocked as a target.")
         if allowed_host and host != allowed_host:
-            raise UnsafeTarget("Redirect left the explicitly authorized hostname scope.")
+            raise UnsafeTarget(f"Redirect to {host} was blocked; URL scans stay on the submitted hostname.")
         addresses = _resolve_public(host, port)
         address = addresses[0]
         parts = urllib.parse.urlsplit(normalized)
@@ -694,11 +694,19 @@ def _url_result(scan_id, cancel_check, update):
     except ScanCancelled:
         raise
     except Exception as exc:
-        findings.append(_finding("fetch-incomplete", "Remote fetch could not be completed", "informational", "high", "scan-limitation",
-            target, f"Fetch stopped safely ({type(exc).__name__}).", "The scanner could not obtain a bounded public response.",
+        redirected_out_of_scope = isinstance(exc, UnsafeTarget) and str(exc).startswith("Redirect to ")
+        reason = (str(exc)[:300] if isinstance(exc, UnsafeTarget)
+                  else f"Fetch stopped safely ({type(exc).__name__}).")
+        provider_used = reputation.get("status") not in (
+            "not_configured", "skipped_consent", "skipped_private_target")
+        title = ("Cross-host redirect blocked by scan scope" if redirected_out_of_scope
+                 else "Remote fetch could not be completed")
+        findings.append(_finding("fetch-incomplete", title, "informational", "high", "scan-limitation",
+            target, reason, "The scanner could not obtain a bounded response within the submitted hostname scope.",
             "Remote metadata checks could not be completed.", "Review the URL and retry only if you are authorized to assess it."))
-        return findings, {"reputation": reputation, "engines": ["local URL heuristics"],
-                         "limitations": ["Remote fetch unavailable; findings are incomplete."]}, "partial"
+        return findings, {"reputation": reputation,
+                         "engines": ["local URL heuristics"] + ([reputation["provider"]] if provider_used else []),
+                         "limitations": [reason, "Remote page findings are incomplete; reputation results apply only to the submitted URL."]}, "partial"
 
 
 def _website_result(scan_id, cancel_check, update):
